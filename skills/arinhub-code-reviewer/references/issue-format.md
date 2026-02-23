@@ -1,4 +1,4 @@
-# Issue Format Reference
+# Issue Format
 
 Each issue must follow this structure:
 

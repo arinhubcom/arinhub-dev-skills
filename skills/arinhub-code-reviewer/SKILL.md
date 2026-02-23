@@ -69,9 +69,11 @@ Create the review file with a header:
 # PR Review: ${REPO_NAME} #${PR_NUMBER}
 
 **Date:** <current date>
-**PR:** <PR URL>
+**Repo:** ${REPO_NAME}
 **Branch:** ${PR_BRANCH}
-**Base:** ${PR_BASE}
+**Base Branch:** ${PR_BASE}
+**PR Number:** ${PR_NUMBER}
+**PR Link:** <PR URL>
 
 ## Issues
 
@@ -86,8 +88,9 @@ Create the review file with a header:
 # Local Review: ${REPO_NAME} (${BRANCH_NAME})
 
 **Date:** <current date>
+**Repo:** ${REPO_NAME}
 **Branch:** ${BRANCH_NAME}
-**Base:** ${BASE_BRANCH} (merge base: ${MERGE_BASE})
+**Base Branch:** ${BASE_BRANCH} (merge base: ${MERGE_BASE})
 
 ## Issues
 
@@ -183,69 +186,13 @@ Collect issues from all subagents (three or four, depending on `HAS_REACT`) and 
 
 ### 8. Write Issues to Review File
 
-Append deduplicated issues to the review file, grouped by severity:
+Append deduplicated issues to the review file, grouped by severity. Use the format defined in [review-format.md](references/review-format.md).
 
-````markdown
-### High Priority
+### 9. React Health Report
 
-- **[source]** `path/to/file.ts:42` — Description of the issue.
+**Skip this step if `HAS_REACT=false`.**
 
-  ```ts
-  // the problematic code from the PR diff
-  const result = unsafeOperation(input);
-  ```
-
-  ```diff
-  - const result = unsafeOperation(input);
-  + const result = safeOperation(sanitize(input));
-  ```
-
-### Medium Priority
-
-- **[source]** `path/to/file.ts:88-95` — Description of the issue.
-
-  ```ts
-  // the problematic code from the PR diff
-  items.forEach((item) => {
-    process(item);
-  });
-  ```
-
-  ```diff
-  - items.forEach(item => {
-  -   process(item);
-  - });
-  + await Promise.all(items.map(item => process(item)));
-  ```
-
-### Low Priority
-
-- **[source]** `path/to/file.ts:12` — Description of the issue.
-
-  ```ts
-  // the relevant code snippet
-  let x = getValue();
-  ```
-
----
-
-**Total issues:** N (X High Priority, Y Medium Priority, Z Low Priority)
-**Sources:** code-reviewer, octocode-roast, pr-review-toolkit[, react-doctor] (include react-doctor only if HAS_REACT=true)
-````
-
-### 9. React Health Report (only if `HAS_REACT=true`)
-
-If `HAS_REACT=true`, append the full output from the `react-doctor` subagent (Subagent D) to the review file under a dedicated section:
-
-```markdown
-## React Health
-
-<full react-doctor report>
-```
-
-This section captures React-specific diagnostics (performance, hooks, component patterns, security) separately from the general deduplicated issues above.
-
-If `HAS_REACT=false`, skip this section entirely.
+Follow the instructions in [react-health-report.md](references/react-health-report.md).
 
 ### 10. Verify Requirements Coverage
 
@@ -263,29 +210,17 @@ Append the returned coverage report to the end of the review file under a new se
 <coverage report content from arinhub-verify-requirements-coverage>
 ```
 
-### 11. Submit PR Review (only if `MODE=remote`)
+### 11. Submit PR Review
 
 **Skip this step if `MODE=local`.**
 
-Spawn a subagent to submit the review for PR `${PR_NUMBER}` using the `arinhub-submit-code-review` skill. Pass the review file path (`${REVIEW_FILE}`) so the subagent reads issues from it. The subagent must follow the `arinhub-submit-code-review` procedure for deduplication against existing PR comments before submission.
+Follow the instructions in [submit-pr-review.md](references/submit-pr-review.md).
 
-### 12. Restore Working Tree (only if `MODE=remote`)
+### 12. Restore Working Tree
 
 **Skip this step if `MODE=local`.**
 
-Return to the original branch and restore any stashed changes from Step 4:
-
-```bash
-git checkout ${ORIGINAL_BRANCH}
-
-# Restore stashed changes if the stash was created in Step 4.
-# We look for a stash entry with the unique message we used when stashing.
-# If found, we pop it to restore the changes.
-STASH_INDEX=$(git stash list | grep -m1 "arinhub-code-reviewer: auto-stash" | sed 's/stash@{\([0-9]*\)}.*/\1/')
-if [ -n "$STASH_INDEX" ]; then
-  git stash pop stash@{$STASH_INDEX}
-fi
-```
+Follow the instructions in [restore-working-tree.md](references/restore-working-tree.md).
 
 ### 13. Report to User
 
