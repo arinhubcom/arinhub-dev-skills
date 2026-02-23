@@ -298,4 +298,4 @@ Present the coverage report from Step 9. Include:
 - Do not evaluate code quality -- this skill only checks implementation completeness against the issue description
 - For issues with sub-tasks or linked child issues, only evaluate the requirements in the specific linked issue
 - When multiple issues are linked, report coverage for each issue separately
-- In `MODE=local`, the diff comes from `git diff HEAD` (staged + unstaged changes) instead of a PR diff. The issue must be provided by the user or extracted from the branch name — if neither yields a result, inform the user and stop
+- In `MODE=local`, the diff comes from `git diff "${MERGE_BASE}"` (all committed and uncommitted changes on the branch relative to the base branch) instead of a PR diff. The issue must be provided by the user or extracted from the branch name — if neither yields a result, inform the user and stop

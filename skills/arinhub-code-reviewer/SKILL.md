@@ -1,6 +1,6 @@
 ---
 name: arinhub-code-reviewer
-description: Review code for correctness, maintainability, and adherence to project standards. Supports local changes (staged or working tree) and remote Pull Requests (by ID or URL). Use when asked to "ah review code", "ah review code 123", or "ah review PR 123".
+description: Review code for correctness, maintainability, and adherence to project standards. Supports local branch changes and remote Pull Requests (by ID or URL). Use when asked to "ah review code", "ah review code 123", or "ah review PR 123".
 argument-hint: "PR number or URL (e.g., 100, #456, https://github.com/owner/repo/pull/789), or omit for local changes"
 ---
 

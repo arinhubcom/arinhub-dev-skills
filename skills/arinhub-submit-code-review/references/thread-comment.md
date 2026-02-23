@@ -29,7 +29,7 @@ Each inline thread comment posted on a specific line or line range in the PR dif
 | Severity        | Emoji | Usage                                           |
 | --------------- | ----- | ----------------------------------------------- |
 | High Priority   | 🚨    | Bugs, security issues, data loss risks          |
-| Medium Priority | ✨    | Non High Priority enhancements, better patterns |
+| Medium Priority | ✨    | Non-critical enhancements, better patterns      |
 | Low Priority    | 📝    | Minor style, formatting, non-functional         |
 
 ## Rules
