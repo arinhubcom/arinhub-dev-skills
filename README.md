@@ -2,6 +2,12 @@
 
 Collection of AI agents, hooks, and [skills](skills).
 
+## Prerequisites
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated with repo access
+- Node.js with `npx` available
+
 ## Agent Skills
 
 [Agent Skills](https://agentskills.io) are reusable agent definitions that can be invoked from any chat session. They are designed to perform specific tasks and can orchestrate other skills and commands as needed.
@@ -31,7 +37,7 @@ ah review code
 ah review code 123
 ```
 
-### `arinhub-code-reviewer` — Required Commands & Skills
+#### Required Commands & Skills
 
 The orchestrator launches parallel subagents that depend on external commands and skills:
 
