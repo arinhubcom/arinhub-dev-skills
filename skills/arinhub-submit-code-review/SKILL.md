@@ -20,10 +20,13 @@ Submit a structured code review with line-specific comments to a GitHub pull req
 
 ### 1. Resolve PR Identifier
 
-Extract the PR number from the user input. Strip any `#` prefix or parse the number from a URL.
+Extract the PR number from the user input. Strip any `#` prefix or parse the number from a URL. Also resolve the repository owner and name for API calls.
 
-```
+```bash
 PR_NUMBER=<extracted number>
+REPO_INFO=$(gh repo view --json owner,name)
+REPO_OWNER=$(echo "$REPO_INFO" | jq -r '.owner.login')
+REPO_NAME=$(echo "$REPO_INFO" | jq -r '.name')
 ```
 
 ### 2. Fetch PR Metadata
@@ -39,13 +42,13 @@ gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url
 Retrieve all existing review comments to prevent duplication:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/comments --paginate --jq '.[] | {id, path, line, body, user: .user.login}'
+gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments --paginate --jq '.[] | {id, path, line, body, user: .user.login}'
 ```
 
 Also fetch top-level review bodies:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews --paginate --jq '.[] | {id, body, state, user: .user.login}'
+gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews --paginate --jq '.[] | {id, body, state, user: .user.login}'
 ```
 
 ### 4. Get Issue List
@@ -57,11 +60,42 @@ Get a list of issues from one of these sources (in priority order):
 
 For each issue found, record:
 
+- `severity`: One of `High Priority`, `Medium Priority`, or `Low Priority`
+- `title`: A short descriptive title for the issue (e.g., "Unvalidated user input passed to SQL query")
 - `path`: The relative file path
 - `line`: The specific line number in the new version of the file (must be within the diff hunk). For multi-line issues, this is the **last** line of the range.
 - `start_line` (optional): The first line of a multi-line range. Only set when the issue spans more than one line.
-- `body`: A concise, actionable comment explaining the issue
-- `suggestion` (optional): The replacement code that should replace the line(s) from `start_line` (or `line`) through `line`. Include this whenever you can propose a concrete fix. The suggestion content is the **exact code** that will replace the selected lines -- do not include ` ```suggestion ` fences here, they are added automatically in Step 7.
+- `body`: A concise, actionable comment explaining the issue (the "why", not just the "what")
+- `suggestion` (optional): The **raw replacement code** that should replace the line(s) from `start_line` (or `line`) through `line`. Include this whenever you can propose a concrete fix. The suggestion content is the **exact code** that will replace the selected lines -- do not include ` ```suggestion ` fences here, they are added automatically in Step 7.
+
+#### Parsing a review file
+
+The review file from `arinhub-code-reviewer` uses a different format than the submission API. Apply these transformations when extracting issues:
+
+| Review file field                        | Maps to                    | Transformation                                                                                                                                                                        |
+| ---------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `**Severity:** High Priority`            | `severity`                 | Use the value directly (`High Priority`, `Medium Priority`, or `Low Priority`)                                                                                                        |
+| Issue heading (`#### <text>`)            | `title`                    | Use the heading text as the title                                                                                                                                                     |
+| `**File:** path/to/file.ts`              | `path`                     | Use the path directly (strip any markdown link syntax or line-number suffix)                                                                                                          |
+| `**Line(s):** 42`                        | `line: 42`                 | Single line: set `line` only                                                                                                                                                          |
+| `**Line(s):** 42-50`                     | `start_line: 42, line: 50` | Range: set `start_line` to the first number, `line` to the second                                                                                                                     |
+| `**Description:** ...`                   | `body`                     | Use as the explanation text                                                                                                                                                           |
+| `**Suggestion:** ` ` ```diff ``` ` block | `suggestion`               | **Strip diff markers**: remove lines starting with `-` (deletions), and for lines starting with `+`, remove the `+` prefix and leading space. The result is the raw replacement code. |
+
+**Example diff-to-suggestion transformation:**
+
+Review file contains:
+
+```diff
+- const result = unsafeOperation(input);
++ const result = safeOperation(sanitize(input));
+```
+
+Extracted `suggestion` (raw replacement code):
+
+```
+const result = safeOperation(sanitize(input));
+```
 
 ### 5. Deduplicate Comments
 
@@ -82,7 +116,13 @@ Submit a single review via the GitHub API. The review consists of one **main rev
 
 **Main review comment** (`body`): See [main-review-comment.md](references/main-review-comment.md) for the full template and examples.
 
-**Thread comments** (`comments[].body`): See [thread-comment.md](references/thread-comment.md) for the full template and examples.
+**Thread comments** (`comments[].body`): See [thread-comment.md](references/thread-comment.md) for the full template, body assembly instructions, and examples.
+
+#### Determining event type
+
+- Use `"APPROVE"` if **no** issues with severity `High Priority` remain after deduplication.
+- Use `"COMMENT"` if **any** issue has severity `High Priority`.
+- Never use `"REQUEST_CHANGES"` unless the user explicitly asks.
 
 #### Comment types
 
@@ -124,7 +164,7 @@ Run before submission:
 - Every comment has `path`, `line`, and `side: "RIGHT"`
 - Multi-line comments additionally have `start_line` and `start_side: "RIGHT"`
 - `line` (and `start_line` for ranges) falls inside the PR diff hunk for that file
-- Suggestion fences are appended in `body` (do not pre-wrap suggestion content in fences earlier)
+- Each `body` that includes a suggestion contains ` ```suggestion ``` ` fences wrapping the raw replacement code (assembled in "Assembling thread comment body" above)
 - Suggestion replacement code preserves indentation and exact intended final content
 - Empty suggestion block (` ```suggestion\n``` `) only when the intent is to delete the selected line(s)
 
@@ -133,18 +173,18 @@ Run before submission:
 Build the JSON payload with all comments (single-line and multi-line mixed) and submit:
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews \
+gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews \
   --method POST \
   --input - <<'EOF'
 {
-  "event": "APPROVE or COMMENT",
+  "event": "<APPROVE or COMMENT per 'Determining event type' above>",
   "body": "<main-review-comment>",
   "comments": [
     {
       "path": "src/auth.ts",
       "line": 42,
       "side": "RIGHT",
-      "body": "<thread-comment>"
+      "body": "<assembled thread-comment body>"
     },
     {
       "path": "src/utils.ts",
@@ -152,18 +192,28 @@ gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews \
       "line": 14,
       "start_side": "RIGHT",
       "side": "RIGHT",
-      "body": "<thread-comment>"
+      "body": "<assembled thread-comment body>"
     }
   ]
 }
 EOF
 ```
 
+#### Error handling
+
+If the API returns an error (e.g., `422 Unprocessable Entity`):
+
+1. Parse the error response to identify which comment(s) failed (GitHub typically reports the index or the `path`/`line` that is invalid).
+2. The most common cause is a `line` or `start_line` that falls outside the PR diff hunk. For each failing comment:
+   - Re-fetch the diff hunk for that file (`gh pr diff $PR_NUMBER` and locate the `@@` headers for the file).
+   - Verify that the `line` value falls within one of the hunk ranges. If not, adjust the line to the nearest valid line within the hunk, or drop the comment if no valid line exists.
+3. Remove or fix the failing comments and retry the submission **once**. If the retry also fails, report the error to the user with the full API response and the list of comments that could not be submitted.
+
 ### 8. Report Result
 
 After submission, confirm to the user:
 
-- Number of review comments submitted
+- Number of review comments submitted (and any that were dropped due to errors)
 - The PR URL for reference
 - Brief list of issues flagged
 
@@ -173,10 +223,10 @@ If no review was submitted (Step 6), explain that no new issues were found beyon
 
 Look for a Requirements Coverage section in the same source used in Step 4:
 
-1. **Review file**: If a review file was used, look for a `## Requirements Coverage` section and extract its full content.
-2. **Current chat session**: If no review file was used, look for any Requirements Coverage report or coverage summary produced during the current chat session.
+1. **Review file**: If a review file was used, look for a `## Requirements Coverage` section and extract its full content (everything from the `## Requirements Coverage` heading to the next `##` heading or end of file).
+2. **Current chat session**: If no review file was used, search the current chat session for output from the `arinhub-verify-requirements-coverage` skill. Specifically, look for a section starting with `## PR Requirements Coverage:` or `## Local Requirements Coverage:` that contains a requirements table and summary.
 
-If no Requirements Coverage is found, skip to the end -- this step is optional.
+If no Requirements Coverage is found from either source, skip to the end -- this step is optional.
 
 ### 10. Post Requirements Coverage Comment
 
@@ -197,7 +247,6 @@ EOF
 
 ## Important Notes
 
-- Use `APPROVE` when no High Priority issues are found, otherwise use `COMMENT`. Never use `REQUEST_CHANGES` unless the user explicitly asks.
 - The `line` field in review comments must reference a line that appears in the diff -- comments on unchanged lines will be rejected by the API
 - For multi-line suggestions, use `start_line` and `line` together to define the range being replaced; both must be within the diff hunk
 - An empty suggestion block (` ```suggestion\n``` `) means "delete these lines"

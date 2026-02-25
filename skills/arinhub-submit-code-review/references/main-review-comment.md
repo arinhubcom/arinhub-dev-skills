@@ -25,7 +25,6 @@ Requirements coverage: **<percentage>%** — <one-line summary referencing the l
 - Second section: list main concerns as a markdown bullet list under "Main concerns:" or state "No significant concerns." if there are none
 - Last line: requirements coverage percentage and a brief summary. Reference the linked issue as a full markdown link `[#N](https://github.com/owner/repo/issues/N)`. Use `N/A` if no linked issue exists
 - Do not use emojis in the main review comment
-- If no High Priority issues are found, use `APPROVE` as the event type
 - Keep paragraphs concise -- aim for 1-3 sentences each
 
 ## Examples

@@ -12,6 +12,16 @@ Each inline thread comment posted on a specific line or line range in the PR dif
 - `side` must be `"RIGHT"` (the new version of the file) for comments with suggestions
 - Do not use emojis anywhere in the comment body
 
+## Assembling the body
+
+For each issue, build the `body` field by combining the `severity`, `title`, `body` (explanation), and optional `suggestion` from Step 4 of the main procedure:
+
+- `<severity>` and `<title>` come from the issue's `severity` and `title` fields
+- `<explanation-why>` comes from the issue's `body` field
+- `<replacement-code>` comes from the issue's `suggestion` field (raw code, no fences)
+
+The ` ```suggestion ``` ` fences are added here — the `suggestion` field contains only raw replacement code, never fences.
+
 ## Format
 
 ### With suggestion
