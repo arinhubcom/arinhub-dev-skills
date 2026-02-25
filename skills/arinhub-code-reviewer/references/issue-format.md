@@ -1,5 +1,15 @@
 # Issue Format
 
+## Severity Levels
+
+Use the following severity levels to categorize issues:
+
+- **High Priority**: Critical issues that could cause bugs, security vulnerabilities, or data loss. These should be addressed before merging.
+- **Medium Priority**: Important improvements that enhance code quality, maintainability, or performance but are not critical. These should be addressed before merging if possible.
+- **Low Priority**: Minor issues such as style inconsistencies, formatting, or non-functional suggestions. These can be addressed at the developer's discretion.
+
+## Structure
+
 Each issue must follow this structure:
 
 ````markdown
