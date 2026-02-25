@@ -2,9 +2,31 @@
 
 Each inline thread comment posted on a specific line or line range in the PR diff.
 
+## Rules
+
+- Keep each thread comment concise and actionable
+- Explain the "why" not just the "what"
+- Prefer suggested changes over plain comments whenever a concrete fix can be proposed
+- The explanation text goes **before** the suggestion block in the `body`
+- Each comment `line` must fall within a diff hunk for the given `path`
+- `side` must be `"RIGHT"` (the new version of the file) for comments with suggestions
+- Do not use emojis anywhere except the severity prefix at the start of the comment body
+
+## Severity Emojis
+
+Use the following emojis to indicate the severity of the issue:
+
+- **High Priority**: 🚨
+- **Medium Priority**: ✨
+- **Low Priority**: 📝
+
 ## Format
 
 ### With suggestion
+
+Use a suggestion block whenever you can propose a concrete fix. GitHub renders it as a diff with an "Apply" button the author can click to commit the change directly.
+
+The suggestion content is the **exact code** that will replace the selected line(s) from `start_line` (or `line`) through `line` -- preserve indentation and formatting precisely.
 
 ````md
 <emoji> [<Severity>] <title>
@@ -16,6 +38,18 @@ Each inline thread comment posted on a specific line or line range in the PR dif
 ```
 ````
 
+**Special cases:**
+
+- **Delete lines** -- use an empty suggestion block:
+
+  ````md
+  ```suggestion
+
+  ```
+  ````
+
+- **Multi-line replacement** -- the suggestion replaces the entire range defined by `start_line` … `line`; both must fall within the same diff hunk
+
 ### Without suggestion (pure observation)
 
 ```md
@@ -23,24 +57,6 @@ Each inline thread comment posted on a specific line or line range in the PR dif
 
 <explanation-why>
 ```
-
-## Severity Prefixes
-
-| Severity        | Emoji | Usage                                           |
-| --------------- | ----- | ----------------------------------------------- |
-| High Priority   | 🚨    | Bugs, security issues, data loss risks          |
-| Medium Priority | ✨    | Non-critical enhancements, better patterns      |
-| Low Priority    | 📝    | Minor style, formatting, non-functional         |
-
-## Rules
-
-- Keep each thread comment concise and actionable
-- Explain the "why" not just the "what"
-- Prefer suggested changes over plain comments whenever a concrete fix can be proposed
-- The explanation text goes **before** the suggestion block in the `body`
-- Each comment `line` must fall within a diff hunk for the given `path`
-- `side` must be `"RIGHT"` (the new version of the file) for comments with suggestions
-- Do not use emojis anywhere except the title prefix
 
 ## Examples
 
