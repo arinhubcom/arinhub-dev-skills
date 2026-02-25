@@ -78,19 +78,61 @@ For each issue identified in Step 4, compare against existing comments from Step
 
 ### 7. Submit the Review
 
-Submit a single review via the GitHub API. The review consists of **one main comment** (`body`) with **individual inline comments** (`comments`) that appear as conversation threads anchored to specific lines in the diff.
+Submit a single review via the GitHub API. The review consists of one **main review comment** with individual **thread comments** that appear as conversation threads anchored to specific lines in the diff.
 
-Preflight validation checklist (run before submission):
+**Main review comment** (`body`): See [main-review-comment.md](references/main-review-comment.md) for the full template and examples.
 
-- Validate JSON payload before sending (e.g., pipe the heredoc through `jq . >/dev/null` to check syntax)
-- Ensure each comment has valid `path`, `line`, and `side: "RIGHT"`
-- For multi-line comments, include `start_line` and `start_side: "RIGHT"` together with `line`
-- Confirm `line` (and `start_line` for ranges) is inside the PR diff hunk for that file
-- If a suggestion is included, append it in `body` using ` ```suggestion ` fences (do not pre-wrap suggestion content in fences earlier)
-- Ensure suggestion replacement code preserves indentation and exact intended final content
-- Use an empty suggestion block (` ```suggestion\n``` `) only when the intent is to delete selected lines
+**Thread comments** (`comments[].body`): See [thread-comment.md](references/thread-comment.md) for the full template and examples.
 
-````bash
+#### Comment types
+
+Each entry in `comments` uses one of two shapes depending on whether the issue targets a single line or a range of lines:
+
+**Single-line comment** -- targets exactly one line in the diff:
+
+```json
+{
+  "path": "src/auth.ts",
+  "line": 42,
+  "side": "RIGHT",
+  "body": "<thread-comment>"
+}
+```
+
+Required fields: `path`, `line`, `side`.
+
+**Multi-line comment** -- targets a range from `start_line` through `line` (both inclusive, both must be within the same diff hunk):
+
+```json
+{
+  "path": "src/utils.ts",
+  "start_line": 10,
+  "line": 14,
+  "start_side": "RIGHT",
+  "side": "RIGHT",
+  "body": "<thread-comment>"
+}
+```
+
+Required fields: `path`, `start_line`, `line`, `start_side`, `side`. The suggestion content replaces **all** lines from `start_line` through `line` verbatim.
+
+#### Preflight validation
+
+Run before submission:
+
+- Validate JSON payload syntax (e.g., pipe the heredoc through `jq . >/dev/null`)
+- Every comment has `path`, `line`, and `side: "RIGHT"`
+- Multi-line comments additionally have `start_line` and `start_side: "RIGHT"`
+- `line` (and `start_line` for ranges) falls inside the PR diff hunk for that file
+- Suggestion fences are appended in `body` (do not pre-wrap suggestion content in fences earlier)
+- Suggestion replacement code preserves indentation and exact intended final content
+- Empty suggestion block (` ```suggestion\n``` `) only when the intent is to delete the selected line(s)
+
+#### Submit command
+
+Build the JSON payload with all comments (single-line and multi-line mixed) and submit:
+
+```bash
 gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews \
   --method POST \
   --input - <<'EOF'
@@ -99,34 +141,23 @@ gh api repos/{owner}/{repo}/pulls/$PR_NUMBER/reviews \
   "body": "<main-review-comment>",
   "comments": [
     {
-      "path": "<file-path>",
-      "line": <line-number>,
+      "path": "src/auth.ts",
+      "line": 42,
       "side": "RIGHT",
-      "body": "<thread-comment>\n\n```suggestion\n<replacement-code>\n```"
+      "body": "<thread-comment>"
+    },
+    {
+      "path": "src/utils.ts",
+      "start_line": 10,
+      "line": 14,
+      "start_side": "RIGHT",
+      "side": "RIGHT",
+      "body": "<thread-comment>"
     }
   ]
 }
 EOF
-````
-
-For **multi-line** suggestions, add `start_line` and `start_side`:
-
-````json
-{
-  "path": "<file-path>",
-  "start_line": <first-line>,
-  "line": <last-line>,
-  "start_side": "RIGHT",
-  "side": "RIGHT",
-  "body": "<thread-comment>\n\n```suggestion\n<replacement-code>\n```"
-}
-````
-
-If a comment has **no suggestion** (pure observation), omit the ` ```suggestion ``` ` block from the body. Still include `"side": "RIGHT"` so that all comments are anchored to the new version of the file.
-
-**Main review comment** (`body`): See [main-review-comment.md](references/main-review-comment.md) for the full template and examples.
-
-**Thread comments** (`comments[].body`): See [thread-comment.md](references/thread-comment.md) for the full template and examples.
+```
 
 ### 8. Report Result
 
