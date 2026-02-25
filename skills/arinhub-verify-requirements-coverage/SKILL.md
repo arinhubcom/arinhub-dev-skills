@@ -15,7 +15,7 @@ Verify that a pull request or local changes fully implement the requirements des
   - Hash-prefixed: `#123`
   - Full URL: `https://github.com/owner/repo/pull/123`
   - If omitted, verifies local changes instead.
-- **Issue number** (optional, local mode): When verifying local changes, an issue number can be provided to check coverage against (e.g., `issue #42`).
+- **Issue number** (optional): An issue number can be provided to check coverage against (e.g., `issue #42`). Works in both remote and local modes. In remote mode, this overrides automatic issue detection from the PR body.
 - **Diff file path** (optional): Path to a pre-existing diff file (e.g., passed by `arinhub-code-reviewer`). If provided, skip fetching the diff in Step 7 and read this file instead.
 
 ## Procedure
@@ -57,15 +57,20 @@ MERGE_BASE=$(git merge-base "${BASE_BRANCH}" HEAD)
 
 **If `MODE=remote`:**
 
-Gather PR details including body and linked issues:
+Gather PR details including body and linked issues. Resolve the repository owner and name for later use in API calls.
 
 ```bash
-gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url
+PR_META=$(gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url)
+PR_BODY=$(echo "$PR_META" | jq -r '.body')
+
+# Resolve repository owner and name for API calls (e.g., GraphQL in Step 4).
+REPO_OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO_NAME=$(gh repo view --json name -q '.name')
 ```
 
 **If `MODE=local`:**
 
-Gather the list of changed files on the branch (committed and uncommitted) relative to the base branch:
+Gather the list of changed files on the branch (committed and unstaged tracked changes) relative to the base branch. Note: untracked files (new files not yet `git add`-ed) are not included.
 
 ```bash
 git diff --name-only "${MERGE_BASE}"
@@ -77,19 +82,21 @@ git diff --name-only "${MERGE_BASE}"
 
 Determine the related issue using these methods in priority order:
 
-**Method A -- Closing keywords in PR body:**
+**Method A -- User-provided issue number:** If the user explicitly provided an issue number (e.g., "verify PR 123, issue #42"), use that directly. Skip Methods B–D.
 
-Search the PR body for GitHub closing keywords followed by an issue reference:
+**Method B -- Closing keywords in PR body:**
+
+Search `$PR_BODY` (from Step 3) for GitHub closing keywords followed by an issue reference:
 
 - `closes #N`, `fixes #N`, `resolves #N` (and their variants: `close`, `closed`, `fix`, `fixed`, `resolve`, `resolved`)
 - Full URL references: `closes https://github.com/owner/repo/issues/N`
 
-**Method B -- GitHub linked issues API:**
+**Method C -- GitHub linked issues API:**
 
 ```bash
 gh api graphql \
-  -F owner='{owner}' \
-  -F repo='{repo}' \
+  -F owner="$REPO_OWNER" \
+  -F repo="$REPO_NAME" \
   -F pr_number=$PR_NUMBER \
   -f query='
     query($owner: String!, $repo: String!, $pr_number: Int!) {
@@ -104,9 +111,14 @@ gh api graphql \
   ' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
 ```
 
-**Method C -- Issue reference in PR body:**
+**Method D -- Issue reference in PR body:**
 
-If Methods A and B yield no results, scan the PR body for any `#N` pattern or issue URL that is not a closing keyword reference.
+If Methods A–C yield no results, scan `$PR_BODY` for any `#N` pattern or issue URL that is not a closing keyword reference. After extracting candidate numbers, verify each is an actual issue (not a PR) by checking for the absence of a `pull_request` key:
+
+```bash
+# Returns empty if $N is a PR, returns the issue number if it is an issue.
+gh api "repos/${REPO_OWNER}/${REPO_NAME}/issues/$N" --jq 'select(.pull_request == null) | .number'
+```
 
 **If `MODE=local`:**
 
@@ -115,6 +127,12 @@ Determine the related issue using these methods in priority order:
 **Method A -- User-provided issue number:** If the user explicitly provided an issue number (e.g., "verify my changes against issue #42"), use that directly.
 
 **Method B -- Branch name convention:** Extract an issue number from the branch name if it follows a convention like `feature/42-description`, `fix/42`, `issue-42-description`, `42-description`, `jj/42-description`, etc.
+
+```bash
+# Extract the first number that appears after a slash or dash boundary (or at the start).
+# Matches: feature/42-desc, fix/42, issue-42-desc, 42-desc, jj/42-desc
+ISSUE_NUMBER=$(git branch --show-current | grep -oP '(?:^|[/-])(\d+)' | head -1 | grep -oP '\d+')
+```
 
 **No issue found:** If no linked issue can be determined, inform the user and stop. Do not guess or fabricate an issue number.
 
@@ -169,7 +187,7 @@ Also review the list of changed files from Step 3 to understand the scope of cha
 
 **If `MODE=local`:**
 
-Diff from the merge base (resolved in Step 2) to the current working tree. This captures all changes on the feature branch — both committed and uncommitted — relative to the base branch.
+Diff from the merge base (resolved in Step 2) to the current working tree. This captures all changes on the feature branch — both committed and unstaged tracked changes — relative to the base branch. Note: untracked files (new files not yet `git add`-ed) are not included.
 
 ```bash
 git diff "${MERGE_BASE}"
@@ -186,6 +204,8 @@ For each requirement from Step 6, determine whether the diff addresses it:
 - **Not covered**: No code changes in the diff relate to this requirement
 
 Use evidence from the diff to justify each assessment. Do not speculate -- base judgments on actual code changes.
+
+Calculate the coverage percentage: `coverage = (fully covered count / total requirements) × 100`, rounded to the nearest integer. Partially covered requirements do **not** count toward the covered total -- they are treated the same as "Not covered" for the percentage calculation, but are still distinguished in the report table.
 
 ### 9. Produce Report
 
@@ -298,4 +318,4 @@ Present the coverage report from Step 9. Include:
 - Do not evaluate code quality -- this skill only checks implementation completeness against the issue description
 - For issues with sub-tasks or linked child issues, only evaluate the requirements in the specific linked issue
 - When multiple issues are linked, report coverage for each issue separately
-- In `MODE=local`, the diff comes from `git diff "${MERGE_BASE}"` (all committed and uncommitted changes on the branch relative to the base branch) instead of a PR diff. The issue must be provided by the user or extracted from the branch name — if neither yields a result, inform the user and stop
+- In `MODE=local`, the diff comes from `git diff "${MERGE_BASE}"` (all committed and unstaged tracked changes on the branch relative to the base branch; untracked files are not included) instead of a PR diff. The issue must be provided by the user or extracted from the branch name — if neither yields a result, inform the user and stop
