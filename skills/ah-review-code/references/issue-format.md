@@ -23,11 +23,16 @@ This helps maintain context and ensures that suggestions are based on the curren
 
 ## Suggestion Section
 
-When providing suggestions, use markdown diff format to clearly indicate the proposed changes.
-This format helps maintain clarity and allows developers to easily understand the suggested modifications.
-Ensure that suggestions are based on the current state of the codebase and do not reference code that has been deleted in the diff file.
-Can include multiple diff blocks if necessary, but should be focused on the specific issue being raised.
-Don't include similar comments like `// ... later:` in suggestions, use more direct markdown diff code blocks to indicate the changes.
+Suggestions MUST be written as ` ```diff ` code blocks using `-` (removed) and `+` (added) line prefixes.
+Lines that stay unchanged within the diff context use a single space (` `) prefix — never leave them unprefixed.
+
+Rules:
+
+- Always base the `-` lines on the exact code from the current diff — do not paraphrase or abbreviate.
+- Each suggestion should be a self-contained diff block that a developer could apply directly.
+- Multiple diff blocks are allowed when changes span non-adjacent regions, but keep each block focused on the specific issue.
+- Do NOT use placeholder comments like `// ... rest unchanged` or `// ... later:` — instead, either show the full context or split into separate diff blocks.
+- If the suggestion is purely an addition (no lines removed), use only `+` prefixed lines with enough ` ` context lines around them for clarity.
 
 ## Structure
 
