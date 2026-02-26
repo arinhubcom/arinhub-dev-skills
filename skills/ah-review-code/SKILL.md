@@ -27,12 +27,10 @@ REVIEWS_DIR=~/.agents/arinhub/code-reviews
 
 **If `MODE=pr`:**
 
-Extract the PR number. Determine the repository name from git remote or the provided URL.
-
 ```sh
 MODE=pr
-PR_NUMBER=<extracted number>
-REPO_NAME=<repository name>
+PR_NUMBER=<extracted from user input>
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 REVIEW_ID=${MODE}-${REPO_NAME}-pr-${PR_NUMBER}
 REVIEW_FILE=${REVIEWS_DIR}/code-review-${REVIEW_ID}.md
 
@@ -46,11 +44,9 @@ PR_TITLE=$(echo "$PR_META" | jq -r '.title')
 
 **If `MODE=local`:**
 
-Determine the repository name from git remote. Use the current branch name for identification, sanitizing slashes to dashes so file paths remain valid. Also determine the base branch and merge base for diffing.
-
 ```sh
 MODE=local
-REPO_NAME=<repository name>
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 BRANCH_NAME=$(git branch --show-current | tr '/' '-')
 REVIEW_ID=${MODE}-${REPO_NAME}-branch-${BRANCH_NAME}
 REVIEW_FILE=${REVIEWS_DIR}/code-review-${REVIEW_ID}.md
