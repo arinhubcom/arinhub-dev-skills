@@ -12,20 +12,20 @@ Collection of AI agents, hooks, and [skills](skills).
 
 [Agent Skills](https://agentskills.io) are reusable agent definitions that can be invoked from any chat session. They are designed to perform specific tasks and can orchestrate other skills and commands as needed.
 
-All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and can be easily invoked using their short names. For example, the `ah-code-reviewer` skill can be invoked with the command `/ah-code-reviewer` or `ah review code`.
+All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and can be easily invoked using their short names. For example, the `ah-review-code` skill can be invoked with the command `/ah-review-code` or `ah review code`.
 
 | Skill                                                                                | Description                                                                                                                                       | Use when                                                                                                                                        |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ah-code-reviewer`](skills/ah-code-reviewer/SKILL.md)                               | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file. | `"ah review code"`, `"ah review code 123"`, `"ah review PR 123"`                                                                                |
+| [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file. | `"ah review code"`, `"ah review code 123"`, `"ah review PR 123"`                                                                                |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                               | `"ah submit code review 123"`, `"ah submit code review to PR 123"`                                                                              |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                            | `"ah verify requirements"`, `"ah verify requirements issue 42"`, `"ah verify requirements PR 123"`, `"ah verify requirements PR 123, issue 42"` |
 
-### How to Use `ah-code-reviewer`
+### How to Use `ah-review-code`
 
 #### Local Changes
 
 ```sh
-/ah-code-reviewer
+/ah-review-code
 # or
 ah review code
 ```
@@ -34,7 +34,7 @@ ah review code
 
 ```sh
 # navigate to the PR repository first
-/ah-code-reviewer 123
+/ah-review-code 123
 # or
 ah review code 123
 ```
@@ -61,7 +61,7 @@ Install all required commands and skills:
 
 ```sh
 claude plugin install pr-review-toolkit
-npx skills add arinhubcom/arinhub -y -g -s ah-code-reviewer -s ah-submit-code-review -s ah-verify-requirements-coverage
+npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage
 npx skills add google-gemini/gemini-cli -y -g -s code-reviewer
 npx skills add bgauryy/octocode-mcp -y -g -s octocode-roast
 npx skills add millionco/react-doctor -y -g -s react-doctor
@@ -77,7 +77,7 @@ npx skills update
 
 ### How to Use `ah-submit-code-review`
 
-> Automatically called by `ah-code-reviewer` when reviewing a remote PR. Can also be used standalone:
+> Automatically called by `ah-review-code` when reviewing a remote PR. Can also be used standalone:
 
 ```sh
 /ah-submit-code-review 123
@@ -87,7 +87,7 @@ ah submit code review 123
 
 ### How to Use `ah-verify-requirements-coverage`
 
-> Automatically called by `ah-code-reviewer` for both local and remote reviews. Can also be used standalone:
+> Automatically called by `ah-review-code` for both local and remote reviews. Can also be used standalone:
 
 ```sh
 /ah-verify-requirements-coverage PR 123, issue 42

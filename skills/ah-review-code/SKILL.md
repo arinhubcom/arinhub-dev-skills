@@ -1,5 +1,5 @@
 ---
-name: ah-code-reviewer
+name: ah-review-code
 description: Use this skill to review code when using the "ah" prefix. Use when asked to "ah review code", "ah review code 123", or "ah review PR 123". Review code for correctness, maintainability, and adherence to project standards. Supports local branch changes and remote Pull Requests (by ID or URL).
 argument-hint: "PR number or URL (e.g., 100, #456, https://github.com/owner/repo/pull/789), or omit for local changes"
 ---
@@ -113,7 +113,7 @@ DIFF_FILE=~/.agents/arinhub/diffs/pr-diff-${REPO_NAME}-${PR_NUMBER}.diff
 ORIGINAL_BRANCH=$(git branch --show-current)
 
 # Stash any uncommitted local changes to prevent data loss during checkout.
-git stash --include-untracked -m "ah-code-reviewer: auto-stash before PR checkout"
+git stash --include-untracked -m "ah-review-code: auto-stash before PR checkout"
 
 gh pr diff ${PR_NUMBER} > ${DIFF_FILE}
 

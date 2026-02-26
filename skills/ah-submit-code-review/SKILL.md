@@ -14,7 +14,7 @@ Submit a structured code review with line-specific comments to a GitHub pull req
   - Number: `123`
   - Hash-prefixed: `#123`
   - Full URL: `https://github.com/owner/repo/pull/123`
-- **Review file path** (optional): Path to a review file produced by `ah-code-reviewer` (e.g., `~/.agents/arinhub/code-reviews/pr-code-review-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
+- **Review file path** (optional): Path to a review file produced by `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/pr-code-review-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
 
 ## Procedure
 
@@ -55,7 +55,7 @@ gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews --paginate --jq '.[
 
 Get a list of issues from one of these sources (in priority order):
 
-1. **Review file**: If a review file path is provided (e.g., from `ah-code-reviewer` orchestrator), read the file and extract all issues from the `## Issues` section.
+1. **Review file**: If a review file path is provided (e.g., from `ah-review-code` orchestrator), read the file and extract all issues from the `## Issues` section.
 2. **Current chat session**: If no review file is specified, collect issues identified during the code review in the current chat session.
 
 For each issue found, record:
@@ -70,7 +70,7 @@ For each issue found, record:
 
 #### Parsing a review file
 
-The review file from `ah-code-reviewer` uses a different format than the submission API. Apply these transformations when extracting issues:
+The review file from `ah-review-code` uses a different format than the submission API. Apply these transformations when extracting issues:
 
 | Review file field                        | Maps to                    | Transformation                                                                                                                                                                                              |
 | ---------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

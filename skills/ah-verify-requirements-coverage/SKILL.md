@@ -16,7 +16,7 @@ Verify that a pull request or local changes fully implement the requirements des
   - Full URL: `https://github.com/owner/repo/pull/123`
   - If omitted, verifies local changes instead.
 - **Issue number** (optional): An issue number can be provided to check coverage against (e.g., `issue #42`). Works in both remote and local modes. In remote mode, this overrides automatic issue detection from the PR body.
-- **Diff file path** (optional): Path to a pre-existing diff file (e.g., passed by `ah-code-reviewer`). If provided, skip fetching the diff in Step 7 and read this file instead.
+- **Diff file path** (optional): Path to a pre-existing diff file (e.g., passed by `ah-review-code`). If provided, skip fetching the diff in Step 7 and read this file instead.
 
 ## Procedure
 
