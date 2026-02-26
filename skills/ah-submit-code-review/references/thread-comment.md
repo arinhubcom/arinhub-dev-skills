@@ -45,6 +45,20 @@ The suggestion content is the **exact code** that will replace the selected line
 
 - **Multi-line replacement** -- the suggestion replaces the entire range defined by `start_line` … `line`; both must fall within the same diff hunk
 
+### With diff block (complex suggestion)
+
+Use a markdown diff block when the suggested change contains multiple diff blocks or non-contiguous edits that cannot be expressed as a single GitHub suggestion. The diff block is appended to the explanation text. The comment will not have an "Apply" button.
+
+````md
+**_<severity>_: <title>**
+
+<explanation>
+
+```diff
+<original diff block from review file, verbatim>
+```
+````
+
 ### Without suggestion (pure observation)
 
 ```md
@@ -76,6 +90,24 @@ The nested null checks can be replaced with optional chaining for better readabi
 
 ```suggestion
 const name = user?.profile?.displayName ?? 'Anonymous';
+```
+````
+
+### Medium Priority -- with diff block (multiple changes)
+
+````md
+**_Medium Priority_: Missing import and usage update**
+
+The `bar` utility is used below but never imported, and the call site should chain through it for proper validation.
+
+```diff
+- import { foo } from './utils';
++ import { foo, bar } from './utils';
+```
+
+```diff
+- foo(data);
++ bar(foo(data));
 ```
 ````
 

@@ -66,7 +66,7 @@ For each issue found, record:
 - `line`: The specific line number in the new version of the file (must be within the diff hunk). For multi-line issues, this is the **last** line of the range.
 - `start_line` (optional): The first line of a multi-line range. Only set when the issue spans more than one line.
 - `explanation`: A concise, actionable comment explaining the issue (the "why", not just the "what")
-- `suggestion` (optional): The **raw replacement code** that should replace the line(s) from `start_line` (or `line`) through `line`. Include this whenever you can propose a concrete fix. The suggestion content is the **exact code** that will replace the selected lines -- do not include ` ```suggestion ` fences here, they are added automatically in Step 7.
+- `suggestion` (optional): Raw replacement code for a concrete fix. Only set for simple, contiguous changes (see **Suggestion conversion rules**). When set, this code replaces lines `start_line` (or `line`) through `line` verbatim. Do not include ` ```suggestion ` fences -- they are added automatically in Step 7. For complex suggestions (multiple diff blocks or non-contiguous changes), do **not** set this field; instead append the diff block(s) to `explanation`.
 
 #### Parsing a review file
 
@@ -82,11 +82,21 @@ The review file from `ah-review-code` uses a different format than the submissio
 | `**Line(s):** 42-50`                     | `start_line: 42, line: 50` | Range: set `start_line` to the first number, `line` to the second                                                                                                                                                   |
 | `**Description:** ...`                   | `explanation`              | Use as the explanation text                                                                                                                                                                                         |
 | `**Code:** ` ` ```...``` ` block         | _(skip)_                   | Informational only -- not used in submission                                                                                                                                                                        |
-| `**Suggestion:** ` ` ```diff ``` ` block | `suggestion`               | **Strip diff markers**: remove lines starting with `-` (deletions), and for lines starting with `+`, remove the leading `+` character and the single space that follows it. The result is the raw replacement code. |
+| `**Suggestion:** ` ` ```diff ``` ` block | `suggestion` or `explanation` appendix | See **Suggestion conversion rules** below. |
 
-**Example diff-to-suggestion transformation:**
+#### Suggestion conversion rules
 
-Review file contains:
+A `**Suggestion:**` section in the review file may contain one or more ` ```diff ``` ` blocks. Apply these rules to decide how to handle it:
+
+**Convert to `suggestion`** (simple case) -- when the suggestion contains **exactly one** diff block **and** all changed lines (`+`/`-` lines) form a **contiguous group** (no unchanged context lines between separate groups of changes):
+
+1. Remove lines starting with `-` (deletions).
+2. For lines starting with `+`, remove the leading `+` and the single space that follows it.
+3. The result is the raw replacement code -- store it in `suggestion`.
+
+Example:
+
+Review file:
 
 ```diff
 - const result = unsafeOperation(input);
@@ -98,6 +108,52 @@ Extracted `suggestion` (raw replacement code):
 ```
 const result = safeOperation(sanitize(input));
 ```
+
+**Keep as markdown diff** (complex case) -- when **any** of these conditions is true:
+
+- The suggestion contains **multiple** ` ```diff ``` ` blocks
+- The diff block contains **non-contiguous changes** (changed lines separated by unchanged context lines, indicating edits at distant locations within the file)
+
+In this case:
+
+1. Do **not** set the `suggestion` field.
+2. Append the original ` ```diff ``` ` block(s) verbatim to the `explanation` text (separated by a blank line).
+3. The comment will be posted as a pure observation (without a GitHub suggestion "Apply" button).
+
+Example -- multiple diff blocks (keep as diff):
+
+Review file:
+
+````
+```diff
+- import { foo } from './utils';
++ import { foo, bar } from './utils';
+```
+
+```diff
+- foo(data);
++ bar(foo(data));
+```
+````
+
+Result: `suggestion` is **not set**. The two diff blocks are appended to `explanation` as-is.
+
+Example -- non-contiguous changes within a single diff block (keep as diff):
+
+Review file:
+
+```diff
+  function process(input) {
+-   const raw = input;
++   const raw = sanitize(input);
+    // ... many unchanged lines ...
+    const config = loadConfig();
+-   return execute(raw, config);
++   return executeSafely(raw, config);
+  }
+```
+
+Result: `suggestion` is **not set**. The diff block is appended to `explanation` as-is.
 
 ### 5. Deduplicate Comments
 
