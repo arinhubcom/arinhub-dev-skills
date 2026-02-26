@@ -1,5 +1,8 @@
 # Submit PR Review
 
-Spawn a subagent to submit the review for PR `${PR_NUMBER}` using the `arinhub-submit-code-review` skill.
-Pass the review file path (`${REVIEW_FILE}`) so the subagent reads issues from it.
-The subagent must follow the `arinhub-submit-code-review` procedure for deduplication against existing PR comments before submission.
+Spawn a subagent to submit the review. The subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT write submission logic or call the GitHub API manually.
+
+- **Invoke:** `/arinhub-submit-code-review`
+- **Arguments:** PR number (`${PR_NUMBER}`), review file path (`${REVIEW_FILE}`)
+
+The skill handles deduplication against existing PR comments before submission.

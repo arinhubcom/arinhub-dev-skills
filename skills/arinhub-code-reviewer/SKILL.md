@@ -158,24 +158,29 @@ Every subagent prompt must include the following shared context:
 
 > The working tree is checked out on the branch that contains the changes under review. A diff file at `${DIFF_FILE}` contains all the changes to review. Do not switch branches, run `gh pr checkout`, or modify the working tree. Return a structured list of issues using the format defined in `references/issue-format.md`. Do not submit any review.
 
+**Delegation rule (applies to ALL subagents A–D):** Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
+
 - If `HAS_REACT=true`: spawn **four** subagents (A, B, C, D).
 - If `HAS_REACT=false`: spawn **three** subagents (A, B, C) — skip Subagent D.
 
 #### Subagent A: code-reviewer
 
-Invoke the `code-reviewer` skill.
+- **Invoke:** `/code-reviewer`
 
 #### Subagent B: octocode-roast
 
-Invoke the `octocode-roast` skill with `code review` mode.
+- **Invoke:** `/octocode-roast`
+- **Extra Arguments:** add `code review` mode
 
 #### Subagent C: pr-review-toolkit
 
-Invoke the `pr-review-toolkit:review-pr` command with `all parallel` mode.
+- **Invoke:** `/pr-review-toolkit:review-pr`
+- **Extra Arguments:** add `all parallel` mode
 
 #### Subagent D: react-doctor (only if `HAS_REACT=true`)
 
-Invoke the `react-doctor` skill. Return the full `react-doctor` diagnostic report alongside the structured issues.
+- **Invoke:** `/react-doctor`
+- **Extra Output:** add full diagnostic report in the subagent's response for merging into the final review file
 
 ### 7. Merge and Deduplicate Issues
 
@@ -199,11 +204,14 @@ Follow the instructions in [react-health-report.md](references/react-health-repo
 
 ### 10. Verify Requirements Coverage
 
-Spawn a subagent to verify requirements coverage using the `arinhub-verify-requirements-coverage` skill. Pass the diff file path (`${DIFF_FILE}`) so the subagent can read the diff directly without fetching it again. The subagent must return the full requirements coverage report in markdown format.
+Spawn a subagent to execute the `/arinhub-verify-requirements-coverage` skill. The subagent's sole job is to invoke the skill and return its output.
 
-**If `MODE=remote`:** Pass PR `${PR_NUMBER}` and `${DIFF_FILE}` to the subagent. It will use the diff file for analysis and resolve the linked issue automatically.
+- **Invoke:** `/arinhub-verify-requirements-coverage`
+- **CRITICAL:** Do NOT perform requirements verification yourself. Do NOT write verification logic or analyze coverage manually. The skill contains its own methodology — delegate to it completely and return whatever it produces (full requirements coverage report in markdown format).
 
-**If `MODE=local`:** Pass `${DIFF_FILE}` to the subagent. The subagent will attempt to extract the linked issue number from the branch name (e.g., `feature/42-description`, `fix/42`, `issue-42-description`). If no issue can be determined, the subagent will skip coverage verification and report that no linked issue was found.
+**If `MODE=remote`:** Pass PR `${PR_NUMBER}` and `${DIFF_FILE}` as arguments to the skill. The skill will use the diff file for analysis and resolve the linked issue automatically.
+
+**If `MODE=local`:** Pass `${DIFF_FILE}` as an argument to the skill. The skill will attempt to extract the linked issue number from the branch name (e.g., `feature/42-description`, `fix/42`, `issue-42-description`). If no issue can be determined, the skill will skip coverage verification and report that no linked issue was found.
 
 Append the returned coverage report to the end of the review file under a new section:
 
