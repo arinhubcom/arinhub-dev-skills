@@ -14,7 +14,7 @@ Submit a structured code review with line-specific comments to a GitHub pull req
   - Number: `123`
   - Hash-prefixed: `#123`
   - Full URL: `https://github.com/owner/repo/pull/123`
-- **Review file path** (optional): Path to a review file produced by `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/pr-code-review-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
+- **Review file path** (optional): Path to a review file produced by `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/code-review-pr-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
 
 ## Procedure
 
@@ -162,7 +162,7 @@ Result: `suggestion` is **not set**. The diff block is appended to `explanation`
 
 For each issue identified in Step 4, compare against existing comments from Step 3:
 
-- **Skip** if an existing comment on the same `path` and `line` (or nearby range +/- 3 lines) already addresses the same concern
+- **Skip** if an existing comment on the same `path` and `line` (or nearby range +/- 5 lines) already addresses the same concern
 - **Skip** if the issue is already mentioned in any top-level review body
 - Use semantic comparison, not exact string matching -- if the existing comment covers the same problem, even with different wording, skip the new comment
 

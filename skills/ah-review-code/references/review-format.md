@@ -67,4 +67,6 @@
 
 **Total issues:** N (X High Priority, Y Medium Priority, Z Low Priority)
 **Sources:** code-reviewer, octocode-roast, pr-review-toolkit[, react-doctor] (include react-doctor only if HAS_REACT=true)
+
+Omit any severity section that has no issues (e.g., if there are no High Priority issues, do not include the `### High Priority` heading).
 ````

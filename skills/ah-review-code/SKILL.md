@@ -142,17 +142,25 @@ DIFF_FILE=~/.agents/arinhub/diffs/diff-${REVIEW_ID}.diff
 ORIGINAL_BRANCH=$(git branch --show-current)
 
 # Stash any uncommitted local changes to prevent data loss during checkout.
-git stash --include-untracked -m "ah-review-code: auto-stash before PR checkout"
+STASH_MSG="ah-review-code: auto-stash ${REVIEW_ID}"
+git stash --include-untracked -m "${STASH_MSG}"
 
 gh pr diff ${PR_NUMBER} > ${DIFF_FILE}
 
-# Check out the PR branch to ensure the working tree reflects the PR code for subagents that require it (e.g., react-doctor).
-gh pr checkout ${PR_NUMBER}
+# Check out the PR branch to ensure the working tree reflects the PR code
+# for subagents that require it (e.g., react-doctor).
+# If checkout fails, restore stashed changes and abort the review.
+if ! gh pr checkout ${PR_NUMBER}; then
+  STASH_INDEX=$(git stash list | grep -m1 "${STASH_MSG}" | sed 's/stash@{\([0-9]*\)}.*/\1/')
+  [ -n "$STASH_INDEX" ] && git stash pop stash@{$STASH_INDEX}
+  echo "ERROR: Failed to check out PR #${PR_NUMBER}. Review aborted."
+  exit 1
+fi
 ```
 
 **If `MODE=local`:**
 
-Diff from the merge base (resolved in Step 2) to the current working tree. This captures all changes on the feature branch — both committed and uncommitted — relative to the source branch. Note: untracked files (new files not yet `git add`-ed) are not included in the diff.
+Diff from the merge base (resolved in Step 2) to the current working tree. This captures all changes on the feature branch — both committed and uncommitted — relative to the source branch. Note: untracked files (new files not yet `git add`-ed) are not included in the diff. To include new files in the review, stage them first with `git add -N <file>` (intent-to-add) before running the review.
 
 ```bash
 DIFF_FILE=~/.agents/arinhub/diffs/diff-${REVIEW_ID}.diff
@@ -166,7 +174,7 @@ No checkout is needed in local mode — the working tree already contains the ch
 
 ### 5. Detect React Code
 
-Spawn a subagent to analyze `${DIFF_FILE}` and determine whether the changes contain React code. The subagent must read the diff file and return `HAS_REACT=true` or `HAS_REACT=false`.
+Spawn a lightweight subagent (use fast model) to analyze `${DIFF_FILE}` and determine whether the changes contain React code. The subagent must read the diff file and return `HAS_REACT=true` or `HAS_REACT=false`.
 
 Set `HAS_REACT=true` if **any** of these conditions are found in the diff:
 
@@ -191,11 +199,13 @@ SUBAGENT_FILE=~/.agents/arinhub/code-reviews/subagent-<agent-name>-${REVIEW_ID}.
 
 Where `<agent-name>` is one of: `code-reviewer`, `octocode-roast`, `pr-review-toolkit`, `react-doctor`.
 
+Before launching the subagents, read the issue format specification from [issue-format.md](references/issue-format.md) and embed its full content directly into each subagent prompt. This ensures subagents have the format regardless of the current working directory.
+
 Every subagent prompt must include the following shared context:
 
 > The working tree is checked out on the branch that contains the changes under review. A diff file at `${DIFF_FILE}` contains all the changes to review. Do not switch branches, run `gh pr checkout`, or modify the working tree. Do not submit any review.
 >
-> **Output:** Write your findings to `${SUBAGENT_FILE}` (your dedicated output file). Read the file `skills/ah-review-code/references/issue-format.md` and use the format defined there.
+> **Output:** Write your findings to `${SUBAGENT_FILE}` (your dedicated output file). Use the issue format specification embedded in your prompt above.
 
 **Delegation rule (applies to ALL subagents A–D):** Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
 
@@ -232,8 +242,8 @@ Every subagent prompt must include the following shared context:
 Read all subagent output files (`~/.agents/arinhub/code-reviews/subagent-*-${REVIEW_ID}.md`) and deduplicate:
 
 1. Parse each agent section (identified by `### <agent-name>` headings) into individual issues.
-2. For each issue, create a fingerprint from: `file path` + `line number range` + `concern category`.
-3. Two issues are duplicates if they share the same file, overlapping line ranges (within ±5 lines), and address the same concern (use semantic comparison, not exact string matching).
+2. For each issue, create a fingerprint from: `file path` + `line number range` + `concern type` (e.g., security, correctness, performance, maintainability, style — inferred from the issue description).
+3. Two issues are duplicates if they share the same file, overlapping line ranges (within ±5 lines), and address the same concern type (use semantic comparison of descriptions, not exact string matching).
 4. When duplicates are found, keep the most detailed/actionable version.
 5. Tag each kept issue with its source(s): `[code-reviewer]`, `[octocode-roast]`, `[pr-review-toolkit]`, `[react-doctor]`, or combination if multiple agents found it.
 6. Transform each issue's `**File:**` field from the plain path in issue-format into the linked format used in review-format: combine the file path with the `**Line(s):**` value to produce a markdown link — e.g., `**File:** [`path/to/file.ts:42`](/absolute/path/to/file.ts#L42)` for single lines or `**File:** [`path/to/file.ts:42-50`](/absolute/path/to/file.ts#L42-L50)` for ranges.
@@ -269,7 +279,7 @@ Spawn a subagent to execute the `/ah-verify-requirements-coverage` skill. The su
 - **Invoke:** `/ah-verify-requirements-coverage`
 - **CRITICAL:** Do NOT perform requirements verification yourself. Do NOT write verification logic or analyze coverage manually. The skill contains its own methodology — delegate to it completely and return whatever it produces (full requirements coverage report in markdown format).
 
-**If `MODE=pr`:** Pass PR `${PR_NUMBER}` and `${DIFF_FILE}` as arguments to the skill. The skill will use the diff file for analysis and resolve the linked issue automatically.
+**If `MODE=pr`:** Pass PR `${PR_NUMBER}` and `${DIFF_FILE}` as arguments to the skill. If a linked issue number was identified during the review (e.g., from PR body or metadata), pass it as well to avoid redundant API lookups. The skill will resolve the linked issue on its own if no issue number is provided.
 
 **If `MODE=local`:** Pass `${DIFF_FILE}` as an argument to the skill. The skill will attempt to extract the linked issue number from the branch name (e.g., `feature/42-description`, `fix/42`, `issue-42-description`). If no issue can be determined, the skill will skip coverage verification and report that no linked issue was found.
 

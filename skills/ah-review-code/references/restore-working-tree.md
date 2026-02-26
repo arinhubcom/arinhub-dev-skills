@@ -6,9 +6,9 @@ Return to the original branch and restore any stashed changes from Step 4:
 git checkout ${ORIGINAL_BRANCH}
 
 # Restore stashed changes if the stash was created in Step 4.
-# We look for a stash entry with the unique message we used when stashing.
+# We look for a stash entry matching the unique REVIEW_ID-tagged message from Step 4.
 # If found, we pop it to restore the changes.
-STASH_INDEX=$(git stash list | grep -m1 "ah-review-code: auto-stash" | sed 's/stash@{\([0-9]*\)}.*/\1/')
+STASH_INDEX=$(git stash list | grep -m1 "ah-review-code: auto-stash ${REVIEW_ID}" | sed 's/stash@{\([0-9]*\)}.*/\1/')
 if [ -n "$STASH_INDEX" ]; then
   git stash pop stash@{$STASH_INDEX}
 fi
