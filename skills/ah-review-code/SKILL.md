@@ -31,7 +31,6 @@ PR_NUMBER=<extracted number>
 REPO_NAME=<repository name, e.g. "my-app">
 REVIEW_ID=${MODE}-${REPO_NAME}-pr-${PR_NUMBER}
 REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
-SUBAGENTS_FILE=~/.agents/arinhub/code-reviews/subagents-${REVIEW_ID}.md
 
 # Get the PR branch name, base branch, URL, and title from PR metadata (single API call).
 PR_META=$(gh pr view ${PR_NUMBER} --json headRefName,baseRefName,url,title)
@@ -51,7 +50,6 @@ REPO_NAME=<repository name>
 BRANCH_NAME=$(git branch --show-current | tr '/' '-')
 REVIEW_ID=${MODE}-${REPO_NAME}-branch-${BRANCH_NAME}
 REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
-SUBAGENTS_FILE=~/.agents/arinhub/code-reviews/subagents-${REVIEW_ID}.md
 
 # Determine the base (source) branch using this priority:
 # 1. If an open/draft PR exists for the current branch, use its base branch
@@ -160,11 +158,19 @@ Otherwise set `HAS_REACT=false`.
 
 Spawn subagents **in parallel** (do not wait for one to finish before starting the next). No subagent may submit a review — they only return findings.
 
+Each subagent writes to its own dedicated file:
+
+```
+SUBAGENT_FILE=~/.agents/arinhub/code-reviews/subagent-<agent-name>-${REVIEW_ID}.md
+```
+
+Where `<agent-name>` is one of: `code-reviewer`, `octocode-roast`, `pr-review-toolkit`, `react-doctor`.
+
 Every subagent prompt must include the following shared context:
 
 > The working tree is checked out on the branch that contains the changes under review. A diff file at `${DIFF_FILE}` contains all the changes to review. Do not switch branches, run `gh pr checkout`, or modify the working tree. Do not submit any review.
 >
-> **Output:** Append your findings to `${SUBAGENTS_FILE}`. Use the format defined in `references/issue-format.md`. Prefix your section with a heading identifying your agent (e.g., `### code-reviewer`, `### octocode-roast`, `### pr-review-toolkit`, `### react-doctor`). If the file does not exist, create it. If it already exists, append to it — do not overwrite other agents' sections.
+> **Output:** Write your findings to `${SUBAGENT_FILE}` (your dedicated output file). Use the format defined in `references/issue-format.md`. Prefix your section with a heading identifying your agent (e.g., `### code-reviewer`, `### octocode-roast`, `### pr-review-toolkit`, `### react-doctor`).
 
 **Delegation rule (applies to ALL subagents A–D):** Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
 
@@ -173,26 +179,30 @@ Every subagent prompt must include the following shared context:
 
 #### Subagent A: code-reviewer
 
+- **File:** `~/.agents/arinhub/code-reviews/subagent-code-reviewer-${REVIEW_ID}.md`
 - **Invoke:** `/code-reviewer`
 
 #### Subagent B: octocode-roast
 
+- **File:** `~/.agents/arinhub/code-reviews/subagent-octocode-roast-${REVIEW_ID}.md`
 - **Invoke:** `/octocode-roast`
 - **Extra Arguments:** add `code review` mode
 
 #### Subagent C: pr-review-toolkit
 
+- **File:** `~/.agents/arinhub/code-reviews/subagent-pr-review-toolkit-${REVIEW_ID}.md`
 - **Invoke:** `/pr-review-toolkit:review-pr`
 - **Extra Arguments:** add `all parallel` mode
 
 #### Subagent D: react-doctor (only if `HAS_REACT=true`)
 
+- **File:** `~/.agents/arinhub/code-reviews/subagent-react-doctor-${REVIEW_ID}.md`
 - **Invoke:** `/react-doctor`
 - **Extra Output:** add full diagnostic report in the subagent's response for merging into the final review file
 
 ### 7. Merge and Deduplicate Issues
 
-Read `${SUBAGENTS_FILE}` and deduplicate:
+Read all subagent output files (`~/.agents/arinhub/code-reviews/subagent-*-${REVIEW_ID}.md`) and deduplicate:
 
 1. Parse each agent section (identified by `### <agent-name>` headings) into individual issues.
 2. For each issue, create a fingerprint from: `file path` + `line number range` + `concern category`.
