@@ -196,18 +196,19 @@ Every subagent prompt must include the following shared context:
 
 - **File:** `~/.agents/arinhub/code-reviews/subagent-code-reviewer-${REVIEW_ID}.md`
 - **Invoke:** `/code-reviewer`
+- **Extra Arguments:** add `run preflight`
 
 #### Subagent B: octocode-roast
 
 - **File:** `~/.agents/arinhub/code-reviews/subagent-octocode-roast-${REVIEW_ID}.md`
 - **Invoke:** `/octocode-roast`
-- **Extra Arguments:** add `code review` mode
+- **Extra Arguments:** add `code review`
 
 #### Subagent C: pr-review-toolkit
 
 - **File:** `~/.agents/arinhub/code-reviews/subagent-pr-review-toolkit-${REVIEW_ID}.md`
 - **Invoke:** `/pr-review-toolkit:review-pr`
-- **Extra Arguments:** add `all parallel` mode
+- **Extra Arguments:** add `all parallel`
 
 #### Subagent D: react-doctor (only if `HAS_REACT=true`)
 
