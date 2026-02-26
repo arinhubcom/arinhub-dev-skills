@@ -97,6 +97,10 @@ Create the review file with a header:
 **PR Title:** ${PR_TITLE}
 **PR Link:** ${PR_URL}
 
+## Preflight
+
+<!-- Preflight report from code-reviewer merged here. -->
+
 ## Issues
 
 <!-- Issues from parallel review agents merged below. No duplicates. -->
@@ -113,6 +117,10 @@ Create the review file with a header:
 **Repo:** ${REPO_NAME}
 **Branch:** ${BRANCH_NAME}
 **Base Branch:** ${BASE_BRANCH} (merge base: ${MERGE_BASE})
+
+## Preflight
+
+<!-- Preflight report from code-reviewer merged here. -->
 
 ## Issues
 
@@ -197,6 +205,7 @@ Every subagent prompt must include the following shared context:
 - **File:** `~/.agents/arinhub/code-reviews/subagent-code-reviewer-${REVIEW_ID}.md`
 - **Invoke:** `/code-reviewer`
 - **Extra Arguments:** add `run preflight`
+- **Extra Output:** add full preflight report in the subagent's response for merging into the final review file
 
 #### Subagent B: octocode-roast
 
@@ -226,17 +235,31 @@ Read all subagent output files (`~/.agents/arinhub/code-reviews/subagent-*-${REV
 4. When duplicates are found, keep the most detailed/actionable version.
 5. Tag each kept issue with its source(s): `[code-reviewer]`, `[octocode-roast]`, `[pr-review-toolkit]`, `[react-doctor]`, or combination if multiple agents found it.
 
-### 8. Write Issues to Review File
+### 8. Write Preflight Report
+
+Extract the preflight report from the code-reviewer subagent's output file (`subagent-code-reviewer-${REVIEW_ID}.md`). The preflight report is the section returned as extra output from the code-reviewer's `run preflight` execution.
+
+Write the preflight report content under the `## Preflight` section in the review file, replacing the placeholder comment.
+
+If the code-reviewer subagent failed or the preflight report is not available, note the failure:
+
+```markdown
+## Preflight
+
+_Preflight report unavailable — code-reviewer subagent did not return preflight data._
+```
+
+### 9. Write Issues to Review File
 
 Append deduplicated issues to the review file, grouped by severity. Use the format defined in [review-format.md](references/review-format.md).
 
-### 9. React Health Report
+### 10. React Health Report
 
 **Skip this step if `HAS_REACT=false`.**
 
 Follow the instructions in [react-health-report.md](references/react-health-report.md).
 
-### 10. Verify Requirements Coverage
+### 11. Verify Requirements Coverage
 
 Spawn a subagent to execute the `/ah-verify-requirements-coverage` skill. The subagent's sole job is to invoke the skill and return its output.
 
@@ -255,19 +278,19 @@ Append the returned coverage report to the end of the review file under a new se
 <coverage report content from ah-verify-requirements-coverage>
 ```
 
-### 11. Submit PR Review
+### 12. Submit PR Review
 
 **Skip this step if `MODE=local`.**
 
 Follow the instructions in [submit-pr-review.md](references/submit-pr-review.md).
 
-### 12. Restore Working Tree
+### 13. Restore Working Tree
 
 **Skip this step if `MODE=local`.**
 
 Follow the instructions in [restore-working-tree.md](references/restore-working-tree.md).
 
-### 13. Report to User
+### 14. Report to User
 
 **If `MODE=pr`:**
 
@@ -297,4 +320,4 @@ Present the review file (`${REVIEW_FILE}`) content to the user and a summary:
 - The review file persists at `~/.agents/arinhub/code-reviews/` for future reference and audit.
 - If a subagent fails or times out, proceed with results from the remaining agents and note the failure in the review file.
 - The diff file persists at `~/.agents/arinhub/diffs/` and is shared read-only across all subagents. The PR branch checkout happens once in Step 4 before subagents launch — no subagent should run `gh pr checkout` or switch branches on its own.
-- In `MODE=local`, step 11 (Submit PR Review) is skipped — the review is output only to the review file and presented to the user. Step 10 (Verify Requirements Coverage) runs if a linked issue can be determined from the branch name or user input.
+- In `MODE=local`, step 12 (Submit PR Review) is skipped — the review is output only to the review file and presented to the user. Step 11 (Verify Requirements Coverage) runs if a linked issue can be determined from the branch name or user input.
