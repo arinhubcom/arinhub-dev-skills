@@ -5,7 +5,7 @@
 ```md
 <paragraph-1: what the core change does correctly, architectural assessment>.
 
-<one-line summary referencing the linked issue as a markdown link>.
+<requirements coverage one-line summary referencing the linked issue as a markdown link>.
 ```
 
 If there are **non-diff issues** (issues where `file_in_diff: false`), append this section after the requirements coverage line. Construct file links as full GitHub blob URLs using the PR's head branch so they are reliably clickable: `https://github.com/<owner>/<repo>/blob/<headRefName>/<path>#L<line>`.

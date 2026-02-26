@@ -271,6 +271,8 @@ Append the returned coverage report to the end of the review file under a new se
 
 **Skip this step if `MODE=local`.**
 
+**Wait for Step 10** — do not proceed until the Verify Requirements Coverage subagent has completed and its report has been appended to the review file.
+
 Follow the instructions in [submit-pr-review.md](references/submit-pr-review.md).
 The subagent returns an **Issues Table** — append it to the end of `${REVIEW_FILE}`.
 
@@ -288,7 +290,7 @@ Present a summary:
 
 - Path to the review file
 - Total issues found (by severity)
-- PR coverage percentage
+- Requirements coverage percentage with one-line summary (if available)
 - Whether the review was submitted successfully
 - The PR URL for reference
 - Present the **Issues Table** (returned by the `ah-submit-code-review` subagent in Step 11)
@@ -299,7 +301,7 @@ Present the review file (`${REVIEW_FILE}`) content to the user and a summary:
 
 - Path to the review file
 - Total issues found (by severity)
-- Requirements coverage percentage (if available)
+- Requirements coverage percentage with one-line summary (if available)
 - Branch name and list of changed files reviewed
 
 ## Important Notes

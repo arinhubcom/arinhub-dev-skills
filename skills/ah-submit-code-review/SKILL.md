@@ -37,7 +37,20 @@ Gather PR details:
 gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url
 ```
 
-### 3. Fetch Existing Review Comments
+### 3. Verify Requirements Coverage
+
+Check whether requirements coverage data is already available:
+
+1. **Review file provided**: If a review file path was given, check whether it contains a `## Requirements Coverage` section. If yes, extract the coverage percentage and summary — no further action needed.
+2. **Current chat session**: If no review file was provided, check the current chat session for output from a previous `ah-verify-requirements-coverage` invocation (sections starting with `## Requirements Coverage:`). If found, use that data — no further action needed.
+3. **No coverage data available**: If neither source contains requirements coverage, spawn a subagent to execute the `/ah-verify-requirements-coverage` skill:
+   - Pass the PR number resolved in Step 1.
+   - If a linked issue number is known (e.g., from the review file or PR body), pass it as well.
+   - Store the resulting coverage report for use when composing the main review comment in Step 8.
+
+If the subagent cannot find a linked issue (e.g., the PR body has no closing keywords and no explicit issue reference), proceed without coverage data — the main review comment will note that coverage data is unavailable.
+
+### 4. Fetch Existing Review Comments
 
 Retrieve all existing review comments to prevent duplication:
 
@@ -51,7 +64,7 @@ Also fetch top-level review bodies:
 gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews --paginate --jq '.[] | {id, body, state, user: .user.login}'
 ```
 
-### 4. Get Issue List
+### 5. Get Issue List
 
 Get a list of issues from one of these sources (in priority order):
 
@@ -63,11 +76,11 @@ For each issue found, record:
 - `severity`: One of `High Priority`, `Medium Priority`, or `Low Priority`
 - `title`: A short descriptive title for the issue (e.g., "Unvalidated user input passed to SQL query")
 - `path`: The relative file path
-- `file_in_diff`: Whether the file appears in the PR diff (`true` or `false`). Issues with `file_in_diff: false` cannot be posted as inline thread comments -- they are included in the main review body instead (see Step 7).
+- `file_in_diff`: Whether the file appears in the PR diff (`true` or `false`). Issues with `file_in_diff: false` cannot be posted as inline thread comments -- they are included in the main review body instead (see Step 8).
 - `line`: The specific line number in the new version of the file. For multi-line issues, this is the **last** line of the range.
 - `start_line` (optional): The first line of a multi-line range. Only set when the issue spans more than one line.
 - `explanation`: A concise, actionable comment explaining the issue (the "why", not just the "what")
-- `suggestion` (optional): Raw replacement code for a concrete fix. Only set for simple, contiguous changes (see **Suggestion conversion rules**). When set, this code replaces lines `start_line` (or `line`) through `line` verbatim. Do not include ` ```suggestion ` fences -- they are added automatically in Step 7. For complex suggestions (multiple diff blocks or non-contiguous changes), do **not** set this field; instead append the diff block(s) to `explanation`.
+- `suggestion` (optional): Raw replacement code for a concrete fix. Only set for simple, contiguous changes (see **Suggestion conversion rules**). When set, this code replaces lines `start_line` (or `line`) through `line` verbatim. Do not include ` ```suggestion ` fences -- they are added automatically in Step 8. For complex suggestions (multiple diff blocks or non-contiguous changes), do **not** set this field; instead append the diff block(s) to `explanation`.
 
 #### Parsing a review file
 
@@ -158,20 +171,20 @@ Review file:
 
 Result: `suggestion` is **not set**. The diff block is appended to `explanation` as-is.
 
-### 5. Deduplicate Comments
+### 6. Deduplicate Comments
 
-For each issue identified in Step 4, compare against existing comments from Step 3:
+For each issue identified in Step 5, compare against existing comments from Step 4:
 
 - **Skip** if an existing comment on the same `path` and `line` (or nearby range +/- 5 lines) already addresses the same concern
 - **Skip** if the issue is already mentioned in any top-level review body
 - Use semantic comparison, not exact string matching -- if the existing comment covers the same problem, even with different wording, skip the new comment
 
-### 6. Decision Gate
+### 7. Decision Gate
 
 - If **no new issues** remain after deduplication (neither inline nor non-diff): **Do not submit a review.** Inform the user that no new issues were found beyond existing review comments.
-- If **new issues exist** (inline, non-diff, or both): Proceed to Step 7. A review with only non-diff issues is still submitted -- the issues appear in the main review body even though there are no inline thread comments.
+- If **new issues exist** (inline, non-diff, or both): Proceed to Step 8. A review with only non-diff issues is still submitted -- the issues appear in the main review body even though there are no inline thread comments.
 
-### 7. Submit the Review
+### 8. Submit the Review
 
 Submit a single review via the GitHub API. The review consists of one **main review comment** with individual **thread comments** that appear as conversation threads anchored to specific lines in the diff.
 
@@ -276,17 +289,18 @@ If the API returns an error (e.g., `422 Unprocessable Entity`):
    - Verify that the `line` value falls within one of the hunk ranges. If not, adjust the line to the nearest valid line within the hunk, or drop the comment if no valid line exists.
 3. Remove or fix the failing comments and retry the submission **once**. If the retry also fails, report the error to the user with the full API response and the list of comments that could not be submitted.
 
-### 8. Report Result
+### 9. Report Result
 
 Present a summary of the review submission to the user, including:
 
 1. The PR URL for reference
 2. Number of review comments submitted vs. total issues found
-3. The Issues table below
+3. Requirements coverage summary (percentage and any missing requirements from Step 3)
+4. The Issues table below
 
 #### Issues table
 
-You **MUST** output a markdown table listing **every** issue from Step 4 with its submission status and reason. Never omit this table, even when all issues were skipped. Use the following format:
+You **MUST** output a markdown table listing **every** issue from Step 5 with its submission status and reason. Never omit this table, even when all issues were skipped. Use the following format:
 
 | #   | Severity        | File                | Line(s) | Title                          | Status         | Reason                            |
 | --- | --------------- | ------------------- | ------- | ------------------------------ | -------------- | --------------------------------- |
@@ -300,11 +314,11 @@ You **MUST** output a markdown table listing **every** issue from Step 4 with it
 
 - **Submitted** — comment was successfully posted as an inline thread comment on the PR. Reason: `—`
 - **In review body** — the file is not part of the PR diff (`file_in_diff: false`), so the issue was included in the main review body under the "Additional issues outside the diff" section. Reason: `File not in diff`
-- **Skipped (duplicate)** — removed during deduplication (Step 5). Reason: describe which existing comment covers it
+- **Skipped (duplicate)** — removed during deduplication (Step 6). Reason: describe which existing comment covers it
 - **Skipped (no diff line)** — the target line is not within any diff hunk and could not be adjusted. Reason: explain why
 - **Failed** — the API rejected the comment and the retry also failed. Reason: include the API error detail
 
-If no review was submitted (Step 6), explain that no new issues were found beyond existing review comments and still show the table with all issues marked as skipped.
+If no review was submitted (Step 7), explain that no new issues were found beyond existing review comments and still show the table with all issues marked as skipped.
 List all issues in descending severity order (High → Medium → Low).
 
 ## Important Notes
