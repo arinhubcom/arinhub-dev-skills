@@ -31,6 +31,7 @@ PR_NUMBER=<extracted number>
 REPO_NAME=<repository name, e.g. "my-app">
 REVIEW_ID=${MODE}-${REPO_NAME}-pr-${PR_NUMBER}
 REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
+SUBAGENTS_FILE=~/.agents/arinhub/code-reviews/subagents-${REVIEW_ID}.md
 
 # Get the PR branch name, base branch, URL, and title from PR metadata (single API call).
 PR_META=$(gh pr view ${PR_NUMBER} --json headRefName,baseRefName,url,title)
@@ -50,6 +51,7 @@ REPO_NAME=<repository name>
 BRANCH_NAME=$(git branch --show-current | tr '/' '-')
 REVIEW_ID=${MODE}-${REPO_NAME}-branch-${BRANCH_NAME}
 REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
+SUBAGENTS_FILE=~/.agents/arinhub/code-reviews/subagents-${REVIEW_ID}.md
 
 # Determine the base (source) branch using this priority:
 # 1. If an open/draft PR exists for the current branch, use its base branch
@@ -160,7 +162,9 @@ Spawn subagents **in parallel** (do not wait for one to finish before starting t
 
 Every subagent prompt must include the following shared context:
 
-> The working tree is checked out on the branch that contains the changes under review. A diff file at `${DIFF_FILE}` contains all the changes to review. Do not switch branches, run `gh pr checkout`, or modify the working tree. Return a structured list of issues using the format defined in `references/issue-format.md`. Do not submit any review.
+> The working tree is checked out on the branch that contains the changes under review. A diff file at `${DIFF_FILE}` contains all the changes to review. Do not switch branches, run `gh pr checkout`, or modify the working tree. Do not submit any review.
+>
+> **Output:** Append your findings to `${SUBAGENTS_FILE}`. Use the format defined in `references/issue-format.md`. Prefix your section with a heading identifying your agent (e.g., `### code-reviewer`, `### octocode-roast`, `### pr-review-toolkit`, `### react-doctor`). If the file does not exist, create it. If it already exists, append to it — do not overwrite other agents' sections.
 
 **Delegation rule (applies to ALL subagents A–D):** Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
 
@@ -188,9 +192,9 @@ Every subagent prompt must include the following shared context:
 
 ### 7. Merge and Deduplicate Issues
 
-Collect issues from all subagents (three or four, depending on `HAS_REACT`) and deduplicate:
+Read `${SUBAGENTS_FILE}` and deduplicate:
 
-1. Parse each subagent's response into individual issues.
+1. Parse each agent section (identified by `### <agent-name>` headings) into individual issues.
 2. For each issue, create a fingerprint from: `file path` + `line number range` + `concern category`.
 3. Two issues are duplicates if they share the same file, overlapping line ranges (within ±5 lines), and address the same concern (use semantic comparison, not exact string matching).
 4. When duplicates are found, keep the most detailed/actionable version.
