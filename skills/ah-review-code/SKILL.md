@@ -29,7 +29,8 @@ Extract the PR number. Determine the repository name from git remote or the prov
 MODE=pr
 PR_NUMBER=<extracted number>
 REPO_NAME=<repository name, e.g. "my-app">
-REVIEW_FILE=~/.agents/arinhub/code-reviews/${MODE}-code-review-${REPO_NAME}-${PR_NUMBER}.md
+REVIEW_ID=${MODE}-${REPO_NAME}-pr-${PR_NUMBER}
+REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
 
 # Get the PR branch name, base branch, URL, and title from PR metadata (single API call).
 PR_META=$(gh pr view ${PR_NUMBER} --json headRefName,baseRefName,url,title)
@@ -47,7 +48,8 @@ Determine the repository name from git remote. Use the current branch name for i
 MODE=local
 REPO_NAME=<repository name>
 BRANCH_NAME=$(git branch --show-current | tr '/' '-')
-REVIEW_FILE=~/.agents/arinhub/code-reviews/${MODE}-code-review-${REPO_NAME}-${BRANCH_NAME}.md
+REVIEW_ID=${MODE}-${REPO_NAME}-branch-${BRANCH_NAME}
+REVIEW_FILE=~/.agents/arinhub/code-reviews/code-review-${REVIEW_ID}.md
 
 # Determine the base (source) branch using this priority:
 # 1. If an open/draft PR exists for the current branch, use its base branch
