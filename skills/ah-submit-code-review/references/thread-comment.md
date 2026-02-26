@@ -25,7 +25,7 @@ Use a suggestion block whenever you can propose a concrete fix. GitHub renders i
 The suggestion content is the **exact code** that will replace the selected line(s) from `start_line` (or `line`) through `line` -- preserve indentation and formatting precisely.
 
 ````md
-**_<severity>_: <title>**
+<title>
 
 <explanation>
 
@@ -38,7 +38,7 @@ The suggestion content is the **exact code** that will replace the selected line
 
 - **Delete lines** -- use an empty suggestion block (no content between the fences):
 
-  ````md
+  ````
   ```suggestion
   ```
   ````
@@ -50,7 +50,7 @@ The suggestion content is the **exact code** that will replace the selected line
 Use a markdown diff block when the suggested change contains multiple diff blocks or non-contiguous edits that cannot be expressed as a single GitHub suggestion. The diff block is appended to the explanation text. The comment will not have an "Apply" button.
 
 ````md
-**_<severity>_: <title>**
+<title>
 
 <explanation>
 
@@ -62,7 +62,7 @@ Use a markdown diff block when the suggested change contains multiple diff block
 ### Without suggestion (pure observation)
 
 ```md
-**_<severity>_: <title>**
+<title>
 
 <explanation>
 ```
@@ -72,7 +72,7 @@ Use a markdown diff block when the suggested change contains multiple diff block
 ### High Priority -- with suggestion
 
 ````md
-**_High Priority_: Unvalidated user input passed to SQL query**
+Unvalidated user input passed to SQL query
 
 The `userId` parameter is interpolated directly into the query string, which is vulnerable to SQL injection. Use a parameterized query instead.
 
@@ -84,7 +84,7 @@ const result = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
 ### Medium Priority -- with suggestion
 
 ````md
-**_Medium Priority_: Simplify conditional with optional chaining**
+Simplify conditional with optional chaining
 
 The nested null checks can be replaced with optional chaining for better readability.
 
@@ -96,7 +96,7 @@ const name = user?.profile?.displayName ?? 'Anonymous';
 ### Medium Priority -- with diff block (multiple changes)
 
 ````md
-**_Medium Priority_: Missing import and usage update**
+Missing import and usage update
 
 The `bar` utility is used below but never imported, and the call site should chain through it for proper validation.
 
@@ -114,7 +114,7 @@ The `bar` utility is used below but never imported, and the call site should cha
 ### Low Priority -- without suggestion
 
 ```md
-**_Low Priority_: Consider extracting magic number to a named constant**
+Consider extracting magic number to a named constant
 
 The timeout value `3000` appears in multiple places. A named constant like `DEFAULT_TIMEOUT_MS` would make the intent clearer and centralize future changes.
 ```
