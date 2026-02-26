@@ -26,12 +26,11 @@ If there are **non-diff issues** (issues where `file_in_diff: false`), append th
 
 The following issues were found in files not modified by this PR. They cannot be attached as inline comments but are worth addressing:
 
-#### <title-1>
+#### _<severity>_: <title-1>
 
-- **Severity:** <severity>
-- **File:** `<path>`
-- **Line(s):** <line> (or <start_line>-<line>)
-- **Description:** <explanation>
+- [<path>:<line>](<path>#L<line>) (or [<path>:<start_line>-<line>](<path>#L<start_line>-L<line>))
+
+<explanation>
 
 ```diff
 <suggestion diff block, if present>
@@ -122,12 +121,11 @@ Requirements coverage: **100%** — all requirements from linked issue [#312](ht
 
 The following issues were found in files not modified by this PR. They cannot be attached as inline comments but are worth addressing:
 
-#### Shared validation helper duplicates logic
+#### _Medium Priority_: Shared validation helper duplicates logic
 
-- **Severity:** Medium Priority
-- **File:** `src/utils/validators.ts`
-- **Line(s):** 15-22
-- **Description:** The `validateEmail` helper in this file uses the same flawed regex. Since the new middleware introduces a corrected pattern, this existing helper should be updated to stay consistent and avoid silent validation drift.
+- [src/utils/validators.ts:15-22](src/utils/validators.ts#L15-L22)
+
+The `validateEmail` helper in this file uses the same flawed regex. Since the new middleware introduces a corrected pattern, this existing helper should be updated to stay consistent and avoid silent validation drift.
 
 ```diff
 - const EMAIL_REGEX = /^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]{2,}$/;
