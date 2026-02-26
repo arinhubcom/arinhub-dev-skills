@@ -175,16 +175,16 @@ For each issue identified in Step 4, compare against existing comments from Step
 
 Submit a single review via the GitHub API. The review consists of one **main review comment** with individual **thread comments** that appear as conversation threads anchored to specific lines in the diff.
 
+**Main review comment** (`body`): See [main-review-comment.md](references/main-review-comment.md) for the full template and examples.
+
+**Thread comments** (`comments[].body`): See [thread-comment.md](references/thread-comment.md) for the full template and examples.
+
 #### Separating inline vs. non-diff issues
 
 Before building the payload, split the deduplicated issues into two groups:
 
 - **Inline issues** (`file_in_diff: true`): Posted as thread comments anchored to specific lines in the diff.
 - **Non-diff issues** (`file_in_diff: false`): Cannot be posted as thread comments (the API would reject them). Instead, these are appended to the main review body as a dedicated section.
-
-**Main review comment** (`body`): See [main-review-comment.md](references/main-review-comment.md) for the full template and examples. If non-diff issues exist, append the **Non-diff issues section** described in that template.
-
-**Thread comments** (`comments[].body`): Only inline issues are included here. See [thread-comment.md](references/thread-comment.md) for the full template, body assembly instructions, and examples.
 
 #### Determining event type
 
@@ -244,7 +244,7 @@ gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews \
   --method POST \
   --input - <<'EOF'
 {
-  "event": "<APPROVE or COMMENT per 'Determining event type' above>",
+  "event": "<APPROVE or REQUEST_CHANGES per 'Determining event type' above>",
   "body": "<main-review-comment>",
   "comments": [
     {
