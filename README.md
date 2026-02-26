@@ -18,7 +18,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file. | `"ah review code"`, `"ah review code 123"`, `"ah review PR 123"`                                                                                |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                               | `"ah submit code review 123"`, `"ah submit code review to PR 123"`                                                                              |
-| [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                            | `"ah verify requirements"`, `"ah verify requirements issue 42"`, `"ah verify requirements PR 123"`, `"ah verify requirements PR 123, issue 42"` |
+| [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                            | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
 
 ### How to Use `ah-review-code`
 
@@ -92,5 +92,5 @@ ah submit code review 123
 ```sh
 /ah-verify-requirements-coverage PR 123, issue 42
 # or
-ah verify requirements PR 123, issue 42
+ah verify requirements coverage PR 123, issue 42
 ```
