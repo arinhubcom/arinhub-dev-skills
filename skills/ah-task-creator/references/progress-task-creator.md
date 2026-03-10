@@ -1,5 +1,6 @@
-# Progress for branch <NEW_BRANCH_NAME>
+# Task Creator Progress
 
+- **Branch**: <NEW_BRANCH_NAME>
 - **Base Branch**: <BASE_BRANCH>
 - **PRD Path**: <PRD_PATH>
 - **ADR Path**: <ADR_PATH>
