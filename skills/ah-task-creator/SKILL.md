@@ -152,6 +152,8 @@ Read `prd.md` again and create a very concise prompt for the `/speckit.plan` com
 
 Also read AGENTS.md in the repo root to gather active technologies and recent changes. After generating the plan, update AGENTS.md with any new active technologies or recent changes discovered during planning.
 
+`Generate a structured Architectural Decision Record (ADR) in /docs/adr/ with sequential numbering (adr-NNNN-title-slug.md), YAML front matter (title, status, date, authors, tags), and sections for Context, Decision, Consequences (POS/NEG coded bullets), Alternatives (ALT coded bullets with rejection reasons), Implementation Notes (IMP coded), and References (REF coded), ensuring objective language, at least 2-3 alternatives, honest positive/negative trade-offs, and actionable implementation guidance.`
+
 Spawn subagent **planner** (Opus, ultrathink):
 
 - Run `/speckit.plan` with the concise tech/architecture prompt
