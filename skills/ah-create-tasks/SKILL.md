@@ -1,10 +1,10 @@
 ---
-name: ah-task-creator
-description: Use this skill to orchestrate the creation of a tasks.md file from a prd.md and adr.md file using the Spec Kit framework. Use when asked to "ah create tasks" or "ah task creator". This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step.
+name: ah-create-tasks
+description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step.
 argument-hint: "path to prd.md file and adr.md file"
 ---
 
-# Task Creator
+# Create Tasks from PRD and ADR
 
 Orchestrate the full Spec Kit pipeline to transform a `prd.md` and `adr.md` file into a well-structured `tasks.md` file. The workflow generates intermediate design artifacts (spec.md, plan.md, research.md, checklists), performs consistency checks, and commits after each major step.
 
@@ -25,7 +25,7 @@ Orchestrate the full Spec Kit pipeline to transform a `prd.md` and `adr.md` file
 
 ```bash
 BASE_BRANCH=$(git branch --show-current)
-PROGRESS_TEMPLATE="progress-task-creator.md"
+PROGRESS_TEMPLATE="progress-tasks.md"
 ```
 
 If the user did not provide **prd.md path**, **adr.md path**, or **issue number**, ask them for all missing values now (before any other work begins). Store these values as `PRD_PATH`, `ADR_PATH`, and `ISSUE_NUMBER`.
