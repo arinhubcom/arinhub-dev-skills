@@ -1,16 +1,17 @@
 ---
 name: ah-task-creator
-description: Use this skill to orchestrate the creation of a tasks.md file from a prd.md file using the Spec Kit framework. Use when asked to "ah create tasks", "ah task creator", "ah generate tasks from PRD", "create tasks from prd.md", "run speckit workflow", or when converting a PRD into actionable implementation tasks. This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step.
-argument-hint: "path to prd.md file (e.g., specs/jj/005-feature/prd.md)"
+description: Use this skill to orchestrate the creation of a tasks.md file from a prd.md and adr.md file using the Spec Kit framework. Use when asked to "ah create tasks", "ah task creator", "ah generate tasks from PRD", "create tasks from prd.md", "run speckit workflow", or when converting a PRD into actionable implementation tasks. This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step.
+argument-hint: "path to prd.md file and adr.md file"
 ---
 
 # Task Creator
 
-Orchestrate the full Spec Kit pipeline to transform a `prd.md` file into a well-structured `tasks.md` file. The workflow generates intermediate design artifacts (spec.md, plan.md, research.md, checklists), performs consistency checks, and commits after each major step.
+Orchestrate the full Spec Kit pipeline to transform a `prd.md` and `adr.md` file into a well-structured `tasks.md` file. The workflow generates intermediate design artifacts (spec.md, plan.md, research.md, checklists), performs consistency checks, and commits after each major step.
 
 ## Input
 
 - **prd.md path** (required): Path to the PRD file that describes the feature. If not provided by the user, ask before proceeding.
+- **adr.md path** (required): Path to the ADR (Architectural Decision Records) file that describes architectural decisions, constraints, and rationale. If not provided by the user, ask before proceeding.
 - **base branch** (required): The branch to merge into (e.g., `main`, `develop`). If not provided by the user, ask before proceeding.
 - **issue number** (required): The GitHub issue number this feature relates to (e.g., `42`). If not provided by the user, ask before proceeding.
 
@@ -31,9 +32,9 @@ SPEC_DIR="specs/${BRANCH_NAME}"
 PROGRESS_FILE="${SPEC_DIR}/progress.md"
 ```
 
-If the user did not provide **prd.md path**, **base branch**, or **issue number**, ask them for all missing values now (before any other work begins). Store these values as `PRD_PATH`, `BASE_BRANCH`, and `ISSUE_NUMBER`.
+If the user did not provide **prd.md path**, **adr.md path**, **base branch**, or **issue number**, ask them for all missing values now (before any other work begins). Store these values as `PRD_PATH`, `ADR_PATH`, `BASE_BRANCH`, and `ISSUE_NUMBER`.
 
-Verify that `prd.md` exists at `PRD_PATH`. If the file does not exist, ask the user for the correct path.
+Verify that `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either file does not exist, ask the user for the correct path.
 
 Create `${SPEC_DIR}/` if it does not exist.
 
@@ -148,7 +149,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 7. Plan
 
-Read `prd.md` again and create a very concise prompt for the `/speckit.plan` command. This prompt **can** include tech stack and architecture choices (unlike the specify prompt). Keep it short -- just the key technology decisions and architectural patterns.
+Read `adr.md` at `ADR_PATH` and create a very concise prompt for the `/speckit.plan` command. The ADR contains architectural decisions, constraints, and rationale -- use these to inform the prompt with tech stack choices, architecture patterns, and design trade-offs. Keep it short -- just the key technology decisions, architectural patterns, and relevant ADR decisions.
 
 Also read AGENTS.md in the repo root to gather active technologies and recent changes. After generating the plan, update AGENTS.md with any new active technologies or recent changes discovered during planning.
 
@@ -266,19 +267,19 @@ Present a summary:
 ## Workflow Diagram
 
 ```
-prd.md
-  |
-  v
-[1] /speckit.specify --> spec.md
-  |
-  v
+prd.md + adr.md
+  |        |
+  v        |
+[1] /speckit.specify --> spec.md (uses prd.md)
+  |        |
+  v        |
 [3] spec-verifier --> fixes spec.md
-  |
-  v
+  |        |
+  v        |
 [5] /speckit.clarify --> user Q&A --> updates spec.md
-  |
-  v
-[7] /speckit.plan --> plan.md, research.md, data-model.md
+  |        |
+  v        v
+[7] /speckit.plan --> plan.md, research.md, data-model.md (uses adr.md)
   |
   v
 [9] researcher --> updates research.md
