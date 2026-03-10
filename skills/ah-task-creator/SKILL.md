@@ -121,9 +121,13 @@ Spawn subagent **committer** (Sonnet):
 
 Spawn subagent **complexity-checker** (Opus, ultrathink):
 
-- Prompt: `Cross-check the details to see if there are any over-engineered pieces in folder ${SPEC_DIR}.`
-- Present findings to the user and **ask which issues to fix**
-- Wait for user response, then fix the identified issues
+- Prompt: `Cross-check the details to see if there are any over-engineered pieces in folder ${SPEC_DIR}. Return a numbered list of all issues found with severity and recommended fix for each.`
+
+After the subagent returns, present its findings to the user yourself (not in a subagent) and **ask which issues to fix**. Wait for the user to respond before continuing.
+
+Once the user responds, spawn subagent **complexity-fixer** (Opus, ultrathink):
+
+- Prompt: `Fix the following issues in ${SPEC_DIR}: <list of user-selected issues from complexity-checker findings>`
 - Update `${PROGRESS_FILE}` Complexity Checker section
 
 ### 12. Commit
