@@ -89,7 +89,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 7. Plan
 
-Read `adr.md` at `ADR_PATH` and create a very concise prompt for the `/speckit.plan` command. The ADR contains architectural decisions, constraints, and rationale -- use these to inform the prompt with tech stack choices, architecture patterns, and design trade-offs. Keep it short -- just the key technology decisions, architectural patterns, and relevant ADR decisions.
+Read `adr.md` at `ADR_PATH` and create a concise prompt for the `/speckit.plan` command. The ADR contains architectural decisions, constraints, and rationale -- use these to inform the prompt with tech stack choices, architecture patterns, and design trade-offs. Keep it short -- just the key technology decisions, architectural patterns, and relevant ADR decisions.
 
 Also read AGENTS.md in the repo root to gather active technologies and recent changes. After generating the plan, update AGENTS.md with any new active technologies or recent changes discovered during planning.
 
