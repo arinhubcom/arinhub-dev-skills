@@ -1,7 +1,7 @@
 ---
 name: ah-create-pr
 description: Use this skill to create a GitHub Pull Request when using the "ah" prefix. Use when asked to "ah create pr", "ah create pull request", or "ah pr". Analyzes the current branch, runs quality checks, generates a well-structured PR with summary, changes, tests, and linked issues, then creates it via `gh pr create`.
-argument-hint: "base branch, issue number"
+argument-hint: "base branch, issue number, labels"
 ---
 
 # Create GitHub Pull Request
@@ -12,6 +12,7 @@ Analyze the current branch and create a well-structured GitHub Pull Request. The
 
 - **Base branch** (REQUIRED): The target branch this PR will merge into (e.g., `main`, `develop`). If the user did not provide it, STOP and ask before proceeding. Never assume or default to any branch.
 - **Issue number** (optional): The GitHub issue number this PR addresses (e.g., `42`, `#42`). If not provided by the user, do not attempt to infer it from the branch name -- simply omit issue references from the PR.
+- **Labels** (optional): Comma-separated list of labels to apply to the PR (e.g., `bug,urgent`, `feature,frontend`). If not provided by the user, auto-detect labels in step 2.
 - Current Git branch with unmerged commits
 - Git diff against the base branch
 
@@ -54,6 +55,21 @@ If the user provided an issue number, use it for the PR references. Do not infer
 - **Categorize changes** by functional area (features, components, API, config, tests, etc.).
 - **Identify patterns** -- look for related changes that form logical blocks (e.g., "Auth flow refactor", "Error handling improvements").
 - **Validate scope** -- verify all changes contribute to the same feature/fix. Flag unrelated changes that may need separate PRs.
+
+#### Determine Labels
+
+If the user provided labels, use them as-is. Otherwise, auto-detect labels by analyzing:
+
+1. **Fetch available labels** from the repository:
+   ```bash
+   gh label list --limit 100 --json name,description
+   ```
+2. **Match labels** based on the PR content:
+   - **PR title type** -- map the commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `perf`, `chore`) to matching labels (e.g., `feat` -> `feature`/`enhancement`, `fix` -> `bug`/`bugfix`, `docs` -> `documentation`)
+   - **Changed file paths** -- infer domain labels from directories (e.g., changes in `src/api/` -> `api`/`backend`, changes in `src/components/` -> `frontend`/`ui`, changes in `infra/` -> `infrastructure`)
+   - **Diff content** -- detect patterns like security fixes, dependency updates, breaking changes, and match to corresponding labels
+3. **Select only labels that exist** in the repository. Never create or suggest labels that do not exist.
+4. **Limit to 1-4 labels** -- pick the most relevant ones. Prefer specific labels over generic ones.
 
 ### 3. Generate PR Content
 
@@ -128,13 +144,14 @@ Push the branch to the remote if it has not been pushed yet or is behind:
 git push -u origin ${CURRENT_BRANCH}
 ```
 
-Then create the PR:
+Then create the PR (include `--label` flags for each determined label):
 
 ```bash
 gh pr create \
   --base "${BASE_BRANCH}" \
   --head "${CURRENT_BRANCH}" \
   --title "<type>: <brief description>" \
+  --label "<label1>" --label "<label2>" \
   --body "$(cat <<'EOF'
 ## Summary
 
@@ -155,14 +172,17 @@ EOF
 )"
 ```
 
+Omit `--label` flags entirely if no labels were determined.
+
 ### 5. Report to User
 
 After creating the PR, provide:
 
 1. **PR URL** -- direct link to the created pull request
 2. **Summary** -- brief recap of what was included
-3. **Action Items** -- any TODOs or follow-ups identified
-4. **Review Checklist** -- quick reminders for self-review before requesting reviewers
+3. **Labels** -- list the labels applied and briefly explain why each was chosen (or note that none were applicable)
+4. **Action Items** -- any TODOs or follow-ups identified
+5. **Review Checklist** -- quick reminders for self-review before requesting reviewers
 
 ## Validation Checks
 
