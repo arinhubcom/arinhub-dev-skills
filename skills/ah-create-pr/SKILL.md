@@ -106,8 +106,7 @@ Example format:
 
 #### GH (GitHub References)
 
-- Use closing keywords with proper syntax: `Fixes #123`, `Closes #456`, `Resolves #789`.
-- List all issues this PR addresses.
+If the user provided an issue number, include closing keywords with proper syntax: `Fixes #123`, `Closes #456`, `Resolves #789`. If no issue number was provided, omit this section entirely from the PR body.
 
 ### 4. Create Pull Request
 
@@ -122,6 +121,14 @@ Example format:
 - TODOs identified in commit messages
 - Tests missing for new features
 - Scope seems too large (>20 files changed)
+
+Push the branch to the remote if it has not been pushed yet or is behind:
+
+```bash
+git push -u origin ${CURRENT_BRANCH}
+```
+
+Then create the PR:
 
 ```bash
 gh pr create \
@@ -161,9 +168,9 @@ After creating the PR, provide:
 
 Before submitting the PR, verify:
 
-- All sections are populated (Summary, Changes, Tests, GH)
+- All applicable sections are populated (Summary, Changes, Tests, and GH if an issue was provided)
 - No placeholder text like "TODO" or "TBD" remains (unless in explicit TODO checkboxes)
-- Issue numbers are correctly formatted with closing keywords
+- If an issue number was provided, closing keywords are correctly formatted
 - Changes align with branch name and commit messages
 - Test coverage is addressed (present or explicitly noted as TODO)
 
@@ -171,12 +178,10 @@ Before submitting the PR, verify:
 
 - If no base branch was provided, STOP and ask the user for it
 - If no commits exist ahead of the base branch, abort and inform user
-- If branch name does not follow convention, ask user for issue context
 - If diff is empty, check for unstaged changes and prompt user
 
 ## Best Practices
 
 - **Atomic PRs**: Warn if scope seems too broad (suggest splitting if >30 files or multiple unrelated features)
 - **Conventional Commits**: Use semantic versioning-friendly titles
-- **Linked Issues**: Always link issues even if mentioned in commits
 - **Self-Review**: Suggest the author review the generated content before requesting reviewers
