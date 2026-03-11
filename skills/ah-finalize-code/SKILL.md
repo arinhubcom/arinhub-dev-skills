@@ -36,7 +36,7 @@ Compute the merge base for the current branch:
 MERGE_BASE=$(git merge-base "${BASE_BRANCH}" HEAD)
 ```
 
-Each subagent must compute its own fresh diff before starting its work:
+Each subagent that analyzes code changes must compute its own fresh diff before starting its work:
 
 ```bash
 DIFF=$(git diff "${MERGE_BASE}")
@@ -140,8 +140,7 @@ Then spawn subagent **committer** (Sonnet) -- run `/commit`.
 Spawn subagent **pr-creator** (Opus, ultrathink):
 
 - Run `/ah-create-pr` with prompt: `base branch: ${BASE_BRANCH}, issue number: ${ISSUE_NUMBER}`
-
-Update `${PROGRESS_FILE}` PR Creator section (status: completed, PR URL).
+- Update `${PROGRESS_FILE}` PR Creator section (status: completed, PR URL).
 
 ### 11. Report to User
 
