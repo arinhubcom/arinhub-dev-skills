@@ -22,6 +22,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                                 | Create tasks from a PRD and ADR using the full Spec Kit pipeline with consistency analysis passes.                                                | `"ah create tasks"`                                                                                                                                                                 |
 | [`ah-create-pr`](skills/ah-create-pr/SKILL.md)                                       | Analyze the current branch, run quality checks, and create a well-structured GitHub PR with summary, changes, tests, and linked issues.           | `"ah create pr"`, `"ah pr"`                                                                                                                                                         |
 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                               | Orchestrate the full pre-PR finalization: simplify, retrospective, tests, JSDoc, docs, specs, code review, and PR -- committing after each step.  | `"ah finalize code"`, `"ah finalize changes"`                                                                                                                                       |
+| [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.  | `"ah resolve pr review"`                                                                                                                                                            |
 
 ### How to Use `ah-review-code`
 
@@ -64,7 +65,7 @@ Install all required commands and skills:
 
 ```sh
 claude plugin install pr-review-toolkit
-npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code
+npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review
 npx skills add google-gemini/gemini-cli -y -g -s code-reviewer
 npx skills add bgauryy/octocode-mcp -y -g -s octocode-roast
 npx skills add millionco/react-doctor -y -g -s react-doctor
@@ -119,3 +120,13 @@ Run from a feature branch with a `specs/<branch-name>/spec.md` file containing `
 # or
 ah finalize code
 ```
+
+### How to Use `ah-resolve-pr-review`
+
+```sh
+/ah-resolve-pr-review
+# or
+ah resolve pr review
+```
+
+Optionally accepts a PR number, `#123`, or a full PR URL. If omitted, the skill detects the PR from the current branch. It checks out the PR branch, fetches all unresolved review threads, implements fixes where possible, runs verification, and presents a summary report before committing.

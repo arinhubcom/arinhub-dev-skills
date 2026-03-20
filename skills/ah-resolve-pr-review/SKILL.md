@@ -1,7 +1,6 @@
 ---
 name: ah-resolve-pr-review
-description: Use this skill to resolve unresolved PR conversations when using the "ah" prefix. Use when asked to "ah resolve pr review", or "ah resolve pr review <PR number or URL>". Also use when the user mentions resolving, addressing, or fixing PR review feedback or unresolved threads.
-argument-hint: "PR number or URL (e.g., 123, #456, https://github.com/owner/repo/pull/789)"
+description: Use this skill to resolve unresolved PR conversations when using the "ah" prefix. Use when asked to "ah resolve pr review". Also use when the user mentions resolving, addressing, or fixing PR review feedback or unresolved threads.
 ---
 
 # Resolve Unresolved PR Conversations
@@ -10,166 +9,49 @@ Resolve unresolved review conversations on a pull request by reading each commen
 
 ## Input
 
-- **PR number or URL** (required): The pull request identifier. Accepts:
-  - Number: `123`
-  - Hash-prefixed: `#123`
-  - Full URL: `https://github.com/owner/repo/pull/123`
+- **PR number or URL** (optional): If provided, checkout that PR branch first. If omitted, the script auto-detects the PR from the current git branch.
 
 ## Procedure
 
-### 0. Verify GitHub CLI Authentication
+### 1. Fetch All PR Data
+
+Read and execute the `scripts/fetch_pr_data.py` script from this skill's directory. It verifies `gh auth status`, auto-detects the PR from the current git branch, and collects all needed data in a single call with proper pagination.
+
+If the user provided a specific PR number or URL, checkout that branch first so the script can detect it:
 
 ```bash
-gh auth status
+gh pr checkout <PR_NUMBER>
 ```
 
-If this command fails, stop and ask the user to authenticate with `gh auth login`.
-
-### 1. Resolve PR Identifier and Repository
-
-Extract the PR number from the user input. Resolve the repository owner and name for API calls.
+Then run the script (resolve the path relative to this SKILL.md's directory):
 
 ```bash
-PR_NUMBER=<extracted number>
-REPO_OWNER=$(gh repo view --json owner -q '.owner.login')
-REPO_NAME=$(gh repo view --json name -q '.name')
+python3 <skill_dir>/scripts/fetch_pr_data.py
 ```
 
-### 2. Fetch Full PR Context
+If the script fails with an auth error, stop and ask the user to run `gh auth login`.
 
-Gather the complete PR picture in parallel -- metadata, diff, comments, and reviews.
+The script outputs a JSON object with the following structure:
 
-```bash
-# PR metadata (title, body, base/head branches, changed files)
-PR_META=$(gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url,state)
-PR_BODY=$(echo "$PR_META" | jq -r '.body')
-PR_BRANCH=$(echo "$PR_META" | jq -r '.headRefName')
-PR_BASE=$(echo "$PR_META" | jq -r '.baseRefName')
-PR_URL=$(echo "$PR_META" | jq -r '.url')
-PR_TITLE=$(echo "$PR_META" | jq -r '.title')
+- `pull_request` -- metadata: `number`, `title`, `body`, `url`, `state`, `base_branch`, `head_branch`, `files`, `owner`, `repo`
+- `diff` -- full PR diff as a string
+- `review_threads` -- object containing:
+  - `total`, `unresolved_count`, `resolved_count` -- counts
+  - `unresolved` -- array of unresolved thread objects (each with `id`, `isResolved`, `isOutdated`, `path`, `line`, `startLine`, `diffSide`, `comments`)
+  - `resolved` -- array of resolved thread objects
+- `reviews` -- simplified review submissions (`id`, `body`, `state`, `user`, `submitted_at`)
+- `conversation_comments` -- simplified issue comments (`id`, `body`, `user`, `created_at`)
+- `linked_issues` -- full details of linked issues (found via GraphQL `closingIssuesReferences`, closing keywords in PR body, or `#N` references verified as issues)
 
-# Full diff
-gh pr diff $PR_NUMBER
+Store this JSON for use in subsequent steps. All PR context, review threads, linked issues, and diff are available from this single output -- no additional API calls are needed for data collection.
 
-# All review comments (inline thread comments)
-gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments \
-  --paginate \
-  --jq '.[] | {id, path, line, original_line, diff_hunk, body, user: .user.login, in_reply_to_id, created_at, pull_request_review_id}'
+### 2. Validate PR State
 
-# All reviews (top-level review bodies with state)
-gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews \
-  --paginate \
-  --jq '.[] | {id, body, state, user: .user.login}'
+Check `pull_request.state` in the JSON output. If it is not `OPEN`, abort and inform the user that only open PRs can be resolved.
 
-# Issue comments (general PR conversation, not inline)
-gh api repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments \
-  --paginate \
-  --jq '.[] | {id, body, user: .user.login, created_at}'
-```
+If `review_threads.unresolved_count` is `0`, inform the user that there are no unresolved conversations and stop.
 
-### 3. Find and Read Linked Issue
-
-The linked GitHub issue provides essential context about what the PR is trying to achieve. Extract the issue number from the PR body, then read the full issue.
-
-**Method A -- Closing keywords in PR body:**
-
-Search `$PR_BODY` for GitHub closing keywords: `closes #N`, `fixes #N`, `resolves #N` (and their variants: `close`, `closed`, `fix`, `fixed`, `resolve`, `resolved`), or full URL references.
-
-**Method B -- GitHub linked issues API:**
-
-```bash
-gh api graphql \
-  -F owner="$REPO_OWNER" \
-  -F repo="$REPO_NAME" \
-  -F pr_number=$PR_NUMBER \
-  -f query='
-    query($owner: String!, $repo: String!, $pr_number: Int!) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $pr_number) {
-          closingIssuesReferences(first: 10) {
-            nodes { number title }
-          }
-        }
-      }
-    }
-  ' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
-```
-
-**Method C -- Issue reference in PR body:**
-
-Scan `$PR_BODY` for any `#N` pattern or issue URL. Verify each candidate is an actual issue:
-
-```bash
-gh api "repos/${REPO_OWNER}/${REPO_NAME}/issues/$N" --jq 'select(.pull_request == null) | .number'
-```
-
-If a linked issue is found, fetch its full details:
-
-```bash
-gh issue view $ISSUE_NUMBER --json number,title,body,labels,comments
-```
-
-Read the entire issue body and comments -- this context helps understand the original requirements and informs whether a reviewer's feedback aligns with the intended behavior.
-
-If no linked issue is found, proceed without it. Note the absence in the final report.
-
-### 4. Identify Unresolved Conversations
-
-Use the GitHub GraphQL API to fetch all review threads and their resolution status:
-
-```bash
-gh api graphql \
-  -F owner="$REPO_OWNER" \
-  -F repo="$REPO_NAME" \
-  -F pr_number=$PR_NUMBER \
-  -f query='
-    query($owner: String!, $repo: String!, $pr_number: Int!, $cursor: String) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $pr_number) {
-          reviewThreads(first: 100, after: $cursor) {
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-            nodes {
-              id
-              isResolved
-              isOutdated
-              path
-              line
-              startLine
-              diffSide
-              comments(first: 50) {
-                nodes {
-                  id
-                  body
-                  author { login }
-                  createdAt
-                  originalPosition
-                  path
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  '
-```
-
-If `pageInfo.hasNextPage` is `true`, re-run the query with `-F cursor="<endCursor>"` and merge the results. Repeat until `hasNextPage` is `false`. This ensures all review threads are fetched even on large PRs with more than 100 threads.
-
-Filter to only **unresolved** threads (`isResolved: false`). Skip threads that are already resolved -- they require no action.
-
-For each unresolved thread, record:
-
-- `thread_id`: The GraphQL node ID
-- `path`: The file path the comment is on
-- `line`/`startLine`: The line(s) referenced
-- `comments`: The full conversation (all replies in the thread)
-- `is_outdated`: Whether the thread references code that has since changed
-
-### 5. Scan Codebase Structure
+### 3. Scan Codebase Structure
 
 Before implementing fixes, build a mental model of the codebase so fixes reuse existing patterns rather than introducing duplicates. Use Glob and Read tools to explore the project structure and identify available resources.
 
@@ -187,23 +69,9 @@ Read key files that are relevant to the files touched by the unresolved conversa
 
 Focus the scan on directories related to the files referenced in the unresolved threads -- there is no need to map the entire codebase if the conversations only touch a few areas.
 
-### 6. Validate PR State
+### 4. Checkout PR Branch
 
-Before proceeding, verify the PR is open:
-
-```bash
-PR_STATE=$(echo "$PR_META" | jq -r '.state')
-if [ "$PR_STATE" != "OPEN" ]; then
-  echo "ERROR: PR #${PR_NUMBER} is ${PR_STATE}. Only open PRs can be resolved."
-  exit 1
-fi
-```
-
-If the PR is not open (`CLOSED` or `MERGED`), abort and inform the user.
-
-### 7. Checkout PR Branch
-
-Check out the PR branch so fixes are applied to the correct code:
+Check out the PR branch so fixes are applied to the correct code (skip if already on the PR branch from Step 1):
 
 ```bash
 ORIGINAL_BRANCH=$(git branch --show-current)
@@ -216,16 +84,16 @@ git stash --include-untracked -m "${STASH_MSG}"
 if ! gh pr checkout $PR_NUMBER; then
   STASH_INDEX=$(git stash list | grep -m1 "${STASH_MSG}" | sed 's/stash@{\([0-9]*\)}.*/\1/')
   [ -n "$STASH_INDEX" ] && git stash pop "stash@{$STASH_INDEX}"
-  echo "ERROR: Failed to check out PR #${PR_NUMBER}. Review aborted."
+  echo "ERROR: Failed to check out PR. Review aborted."
   exit 1
 fi
 ```
 
-### 8. Process Each Unresolved Conversation
+### 5. Process Each Unresolved Conversation
 
-For each unresolved thread from Step 5, follow this sequence:
+For each unresolved thread from `review_threads.unresolved` in the JSON data, follow this sequence:
 
-#### 8a. Check if Thread is Outdated
+#### 5a. Check if Thread is Outdated
 
 If `is_outdated` is `true`, the thread references code that has since changed. The `line`/`startLine` values from the thread may no longer correspond to the current file content. In this case:
 
@@ -234,7 +102,7 @@ If `is_outdated` is `true`, the thread references code that has since changed. T
 3. If the referenced code no longer exists or has already been changed to address the reviewer's concern, mark the thread as `Not fixable` with the reason: "Code has changed since review; the concern may already be addressed."
 4. If the referenced code still exists at a different location, proceed with the fix using the updated line numbers.
 
-#### 8b. Understand the Reviewer's Intent
+#### 5b. Understand the Reviewer's Intent
 
 Read the full thread (all comments and replies). Determine:
 
@@ -242,11 +110,11 @@ Read the full thread (all comments and replies). Determine:
 - Is there a specific suggestion in the thread? (GitHub suggestion block, code snippet, or verbal description)
 - Does the request conflict with the linked issue requirements?
 
-#### 8c. Read the Relevant Source Code
+#### 5c. Read the Relevant Source Code
 
 Read the file referenced by the thread. Look at the surrounding context -- not just the exact line, but the function/component/module it belongs to. Understand how the code fits into the broader architecture.
 
-#### 8d. Assess Feasibility
+#### 5d. Assess Feasibility
 
 Determine if the conversation's request can be addressed in this branch:
 
@@ -260,7 +128,7 @@ Determine if the conversation's request can be addressed in this branch:
 - External dependency: The fix requires changes in another repository, service, or configuration that this branch cannot affect
 - Needs discussion: The reviewer raised a design question that requires team consensus before implementation
 
-#### 8e. Implement the Fix (if fixable)
+#### 5e. Implement the Fix (if fixable)
 
 Apply the change directly to the source code. Follow these principles:
 
@@ -269,7 +137,7 @@ Apply the change directly to the source code. Follow these principles:
 - **Keep changes minimal**: Only change what the reviewer requested. Do not refactor surrounding code or add unrelated improvements.
 - **Preserve behavior**: Ensure the fix does not break existing functionality or tests.
 
-#### 8f. Record the Outcome
+#### 5f. Record the Outcome
 
 For each thread, record:
 
@@ -278,7 +146,7 @@ For each thread, record:
 - Outcome: `Fixed`, `Not fixable`, or `Partially fixed`
 - What was done (for fixes) or why it cannot be done (for non-fixable items)
 
-### 9. Verify Changes
+### 6. Verify Changes
 
 After processing all conversations, verify the changes are sound:
 
@@ -299,16 +167,16 @@ If no verification scripts are found in `package.json`, note this in the report 
 
 If verification fails, determine which fix caused the failure. Fix the regression if possible. If a fix cannot be corrected without introducing new issues, revert it and mark the conversation as `Not fixable` with the reason (e.g., "Fix caused type error in unrelated module; reverted").
 
-### 10. Report to User
+### 7. Report to User
 
-Present a summary of all processed conversations:
+Present a summary using the PR metadata from the JSON output:
 
 ```markdown
-## PR Review Resolution: #<PR_NUMBER>
+## PR Review Resolution: #<pull_request.number>
 
-**PR:** <PR_TITLE> (<PR_URL>)
-**Branch:** <PR_BRANCH>
-**Linked Issue:** #<ISSUE_NUMBER> (or "None found")
+**PR:** <pull_request.title> (<pull_request.url>)
+**Branch:** <pull_request.head_branch>
+**Linked Issue:** #<linked_issues[0].number> (or "None found")
 **Threads processed:** <total> | Fixed: <count> | Not fixable: <count> | Partially fixed: <count>
 
 ### Resolution Details
@@ -328,7 +196,7 @@ For each "Not fixable" conversation, provide a brief explanation:
 
 The report should be concise and actionable. For "Not fixable" items, the explanation should be clear enough that the user can follow up with the reviewer directly.
 
-### 11. Prompt User for Next Steps
+### 8. Prompt User for Next Steps
 
 After presenting the report, ask the user:
 
@@ -338,7 +206,7 @@ After presenting the report, ask the user:
 
 Do not commit or push automatically -- wait for the user's decision.
 
-### 12. Restore Working Tree
+### 9. Restore Working Tree
 
 After the user has made their decision (or if the process is aborted at any point), restore the original branch state:
 
