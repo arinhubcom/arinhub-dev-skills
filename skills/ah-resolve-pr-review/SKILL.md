@@ -17,6 +17,13 @@ Resolve unresolved review conversations on a pull request by reading each commen
 
 Read and execute the `scripts/fetch_pr_data.py` script from this skill's directory. It verifies `gh auth status`, auto-detects the PR from the current git branch, and collects all needed data in a single call with proper pagination.
 
+Before anything else, capture the current branch so it can be restored later:
+
+```bash
+ORIGINAL_BRANCH=$(git branch --show-current)
+STASH_MSG="ah-resolve-pr-review: auto-stash before checkout"
+```
+
 If the user provided a specific PR number or URL, checkout that branch first so the script can detect it:
 
 ```bash
@@ -71,13 +78,12 @@ Focus the scan on directories related to the files referenced in the unresolved 
 
 ### 4. Checkout PR Branch
 
-Check out the PR branch so fixes are applied to the correct code (skip if already on the PR branch from Step 1):
+Skip this step if already on the PR branch (either from Step 1 checkout or because auto-detect means the current branch IS the PR branch).
+
+If a checkout is needed, stash any uncommitted local changes first:
 
 ```bash
-ORIGINAL_BRANCH=$(git branch --show-current)
-
 # Stash any uncommitted local changes
-STASH_MSG="ah-resolve-pr-review: auto-stash before checkout"
 git stash --include-untracked -m "${STASH_MSG}"
 
 # Checkout the PR branch; restore stash and abort on failure

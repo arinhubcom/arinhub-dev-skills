@@ -55,6 +55,7 @@ query(
             nodes {
               id
               body
+              diffHunk
               createdAt
               updatedAt
               author { login }
@@ -300,13 +301,13 @@ _CLOSING_KEYWORD = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
 
 # Matches: fixes #123
 _CLOSING_HASH_PATTERN = re.compile(
-    rf"{_CLOSING_KEYWORD}\s+#(\d+)",
+    rf"\b{_CLOSING_KEYWORD}\s+#(\d+)",
     re.IGNORECASE,
 )
 
 # Matches: fixes https://github.com/owner/repo/issues/123
 _CLOSING_URL_PATTERN = re.compile(
-    rf"{_CLOSING_KEYWORD}\s+https?://github\.com/[^/]+/[^/]+/issues/(\d+)",
+    rf"\b{_CLOSING_KEYWORD}\s+https?://github\.com/[^/]+/[^/]+/issues/(\d+)",
     re.IGNORECASE,
 )
 
@@ -328,9 +329,16 @@ def extract_issue_numbers_from_body(body: str) -> list[int]:
 
 
 def extract_all_issue_refs_from_body(body: str) -> list[int]:
-    """Extract all #N references from the PR body."""
+    """Extract all unique #N references from the PR body."""
     matches = _ISSUE_REF_PATTERN.findall(body)
-    return [int(m) for m in matches]
+    seen: set[int] = set()
+    result: list[int] = []
+    for m in matches:
+        n = int(m)
+        if n not in seen:
+            seen.add(n)
+            result.append(n)
+    return result
 
 
 def verify_is_issue(owner: str, repo: str, number: int) -> bool:
