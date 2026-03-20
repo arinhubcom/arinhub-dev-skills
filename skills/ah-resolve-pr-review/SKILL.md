@@ -1,6 +1,6 @@
 ---
 name: ah-resolve-pr-review
-description: Use this skill to resolve unresolved PR conversations when using the "ah" prefix. Use when asked to "ah resolve pr conversations", "ah resolve conversations", "ah fix pr comments", "ah resolve pr 123", "ah resolve 123", "ah fix review 123", "ah address review comments", or "ah address pr feedback". Also use when the user mentions resolving, addressing, or fixing PR review feedback or unresolved threads.
+description: Use this skill to resolve unresolved PR conversations when using the "ah" prefix. Use when asked to "ah resolve pr review", or "ah resolve pr review <PR number or URL>". Also use when the user mentions resolving, addressing, or fixing PR review feedback or unresolved threads.
 argument-hint: "PR number or URL (e.g., 123, #456, https://github.com/owner/repo/pull/789)"
 ---
 
@@ -16,6 +16,14 @@ Resolve unresolved review conversations on a pull request by reading each commen
   - Full URL: `https://github.com/owner/repo/pull/123`
 
 ## Procedure
+
+### 0. Verify GitHub CLI Authentication
+
+```bash
+gh auth status
+```
+
+If this command fails, stop and ask the user to authenticate with `gh auth login`.
 
 ### 1. Resolve PR Identifier and Repository
 
@@ -154,6 +162,7 @@ If `pageInfo.hasNextPage` is `true`, re-run the query with `-F cursor="<endCurso
 Filter to only **unresolved** threads (`isResolved: false`). Skip threads that are already resolved -- they require no action.
 
 For each unresolved thread, record:
+
 - `thread_id`: The GraphQL node ID
 - `path`: The file path the comment is on
 - `line`/`startLine`: The line(s) referenced
@@ -165,6 +174,7 @@ For each unresolved thread, record:
 Before implementing fixes, build a mental model of the codebase so fixes reuse existing patterns rather than introducing duplicates. Use Glob and Read tools to explore the project structure and identify available resources.
 
 Search for these key directories and patterns (adjust paths based on the project):
+
 - **Utility functions**: `src/utils/**`, `src/helpers/**`, `src/lib/**`
 - **Hooks**: `src/hooks/**`
 - **Components**: `src/components/**`
@@ -227,6 +237,7 @@ If `is_outdated` is `true`, the thread references code that has since changed. T
 #### 8b. Understand the Reviewer's Intent
 
 Read the full thread (all comments and replies). Determine:
+
 - What is the reviewer asking for? (bug fix, refactor, style change, logic change, performance improvement, etc.)
 - Is there a specific suggestion in the thread? (GitHub suggestion block, code snippet, or verbal description)
 - Does the request conflict with the linked issue requirements?
@@ -242,6 +253,7 @@ Determine if the conversation's request can be addressed in this branch:
 **Fixable** -- the request is clear, the change is within scope of the PR, and sufficient information exists to implement it correctly.
 
 **Not fixable** -- the request cannot be addressed. Common reasons:
+
 - Missing information: The reviewer's comment is ambiguous or asks a question without providing direction
 - Out of scope: The change would require modifying code unrelated to this PR's purpose
 - Conflicting requirements: The reviewer's request contradicts the linked issue's requirements
@@ -260,6 +272,7 @@ Apply the change directly to the source code. Follow these principles:
 #### 8f. Record the Outcome
 
 For each thread, record:
+
 - Thread ID and file/line reference
 - Reviewer's request (one-sentence summary)
 - Outcome: `Fixed`, `Not fixable`, or `Partially fixed`
@@ -300,11 +313,11 @@ Present a summary of all processed conversations:
 
 ### Resolution Details
 
-| # | File | Line(s) | Reviewer | Request Summary | Outcome | Notes |
-|---|------|---------|----------|-----------------|---------|-------|
-| 1 | `src/auth.ts` | 42 | @reviewer | Add input validation | Fixed | Used existing `validateInput()` from `src/utils/validation.ts` |
-| 2 | `src/api.ts` | 15-20 | @reviewer | Unclear naming suggestion | Not fixable | Comment is a question without clear direction; needs clarification from reviewer |
-| 3 | `src/db.ts` | 88 | @reviewer | Add error handling | Fixed | Wrapped in try-catch matching pattern from `src/utils/errors.ts` |
+| #   | File          | Line(s) | Reviewer  | Request Summary           | Outcome     | Notes                                                                            |
+| --- | ------------- | ------- | --------- | ------------------------- | ----------- | -------------------------------------------------------------------------------- |
+| 1   | `src/auth.ts` | 42      | @reviewer | Add input validation      | Fixed       | Used existing `validateInput()` from `src/utils/validation.ts`                   |
+| 2   | `src/api.ts`  | 15-20   | @reviewer | Unclear naming suggestion | Not fixable | Comment is a question without clear direction; needs clarification from reviewer |
+| 3   | `src/db.ts`   | 88      | @reviewer | Add error handling        | Fixed       | Wrapped in try-catch matching pattern from `src/utils/errors.ts`                 |
 
 ### Not Fixable Items
 

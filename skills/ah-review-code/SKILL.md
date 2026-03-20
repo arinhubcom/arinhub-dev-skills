@@ -15,6 +15,14 @@ Orchestrate a comprehensive code review by running multiple review strategies in
 
 ## Procedure
 
+### 0. Verify GitHub CLI Authentication
+
+```bash
+gh auth status
+```
+
+If this command fails, stop and ask the user to authenticate with `gh auth login`.
+
 ### 1. Determine Review Target
 
 - **Remote PR**: If the user provides a PR number or URL (e.g., "Review PR #123"), target that remote PR. Set `MODE=pr`.
