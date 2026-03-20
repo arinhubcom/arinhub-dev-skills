@@ -25,6 +25,7 @@ Orchestrate the full Spec Kit pipeline to transform a `prd.md` and `adr.md` file
 
 ```bash
 BASE_BRANCH=$(git branch --show-current)
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 PROGRESS_TEMPLATE="progress-tasks.md"
 ```
 
@@ -43,7 +44,8 @@ Spawn subagent **specifier** (Opus, ultrathink):
   ```bash
   NEW_BRANCH_NAME=$(git branch --show-current)
   SPEC_DIR="specs/${NEW_BRANCH_NAME}"
-  PROGRESS_FILE="${SPEC_DIR}/${PROGRESS_TEMPLATE}"
+  SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
+  PROGRESS_FILE="~/.agents/arinhub/progresses/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
   ```
 - Initialize `${PROGRESS_FILE}` using the template `references/${PROGRESS_TEMPLATE}`. Replace all `<PLACEHOLDER>` values with actual values (branch name, base branch, PRD path, ADR path, issue number, timestamp). Every subagent updates its own section in this file after completing its work.
 - After the file is generated, prepend the following metadata block at the very top of `spec.md` (before any existing content):

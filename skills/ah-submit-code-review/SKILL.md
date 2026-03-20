@@ -24,9 +24,8 @@ Extract the PR number from the user input. Strip any `#` prefix or parse the num
 
 ```bash
 PR_NUMBER=<extracted number>
-REPO_INFO=$(gh repo view --json owner,name)
-REPO_OWNER=$(echo "$REPO_INFO" | jq -r '.owner.login')
-REPO_NAME=$(echo "$REPO_INFO" | jq -r '.name')
+REPO_OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 ```
 
 ### 2. Fetch PR Metadata

@@ -65,7 +65,7 @@ PR_BODY=$(echo "$PR_META" | jq -r '.body')
 
 # Resolve repository owner and name for API calls (e.g., GraphQL in Step 4).
 REPO_OWNER=$(gh repo view --json owner -q '.owner.login')
-REPO_NAME=$(gh repo view --json name -q '.name')
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 ```
 
 **If `MODE=local`:**
