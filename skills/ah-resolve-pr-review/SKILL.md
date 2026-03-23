@@ -6,7 +6,7 @@ argument-hint: "PR number or URL (e.g., 47, #47, https://github.com/owner/repo/p
 
 # Resolve Unresolved PR Conversations
 
-Resolve unresolved review conversations on a pull request by reading each comment, understanding the reviewer's intent, and implementing fixes directly in the codebase. After fixing, reply to each thread explaining what was done and mark it as resolved on GitHub. Uses the full PR context, the linked GitHub issue, and the existing codebase structure to produce clean, idiomatic fixes.
+Resolve unresolved review conversations on a pull request by reading each comment, understanding the reviewer's intent, and creating a fix plan. The plan is presented to the user for approval before any code changes are made. After approval, implements the approved fixes, replies to each thread explaining what was done, and marks threads as resolved on GitHub. Uses the full PR context, the linked GitHub issue, and the existing codebase structure to produce clean, idiomatic fixes.
 
 ## Input
 
@@ -84,7 +84,7 @@ Focus the scan on directories related to the files referenced in the unresolved 
 
 Read key config files relevant to the changes (`package.json`, `tsconfig.json`, etc.). This informs whether existing utilities, hooks, components, CSS classes, or shared functions should be reused in fixes instead of writing new code.
 
-### 4. Process Unresolved Conversations
+### 4. Analyze Unresolved Conversations
 
 Group the unresolved threads by `path` (file) so each file is read once and all related threads are processed together. This avoids redundant file reads and helps maintain consistency across fixes in the same file.
 
@@ -122,9 +122,65 @@ Read the full thread (all comments and replies). Determine:
 - External dependency: fix requires changes in another repository or service
 - Needs discussion: design question requiring team consensus
 
-#### 4d. Implement the Fix (if fixable)
+#### 4d. Plan the Fix (if fixable)
 
-Apply the change directly to the source code:
+Do NOT implement any changes yet. Instead, create a detailed fix plan for each fixable thread:
+
+- **Describe the change**: What exactly will be modified, added, or removed.
+- **Specify the location**: File path, line range, and surrounding context.
+- **Reference existing code**: Note any utilities, hooks, components, or patterns from the codebase that will be reused.
+- **Estimate impact**: List any other files or tests that may be affected by the change.
+- **Note GitHub suggestions**: If the reviewer left a `suggestion` block, include it verbatim in the plan.
+
+#### 4e. Record the Analysis
+
+For each thread, record:
+
+- Thread ID (`id` from GraphQL -- this is the node ID needed for the resolve mutation)
+- File path and line reference
+- Reviewer's request (one-sentence summary)
+- Assessment: `Fixable`, `Not fixable`, or `Already addressed`
+- Planned fix (for fixable items) or reason (for non-fixable items)
+
+### 5. Present Fix Plan for Approval
+
+Present the complete fix plan to the user for review before making any code changes. Format the plan clearly:
+
+```markdown
+## Fix Plan: PR #<number>
+
+**Threads analyzed:** <total> | Fixable: <count> | Not fixable: <count> | Already addressed: <count>
+
+### Planned Fixes
+
+| # | File | Line(s) | Reviewer | Request Summary | Planned Change |
+|---|------|---------|----------|-----------------|----------------|
+| 1 | `src/auth.ts` | 42 | @reviewer | Add input validation | Use existing `validateInput()` from `utils/validation.ts` |
+| 2 | `src/api.ts` | 15-20 | @reviewer | Rename variable | Rename `data` to `userData` per reviewer's suggestion |
+
+### Not Fixable / Already Addressed
+
+| # | File | Line(s) | Reviewer | Request Summary | Reason |
+|---|------|---------|----------|-----------------|--------|
+| 3 | `src/api.ts` | 30 | @reviewer | Unclear naming suggestion | Question without clear direction; needs clarification |
+```
+
+Use the **AskUserQuestion** tool to present the plan and ask for approval:
+
+- Present the formatted plan above.
+- Ask: "Do you approve this fix plan? You can approve all, reject all, or specify which fixes to skip by number (e.g., 'approve all except #2')."
+- Wait for the user's response before proceeding.
+
+Handle the user's response:
+
+- **Approve all**: Proceed to step 6 with all fixable threads.
+- **Approve with exclusions**: Remove the excluded fixes from the implementation list and proceed with the rest.
+- **Reject all**: Skip to step 9 (Report) and present only the analysis without any code changes.
+- **Request changes to the plan**: Update the plan based on the user's feedback and present it again for approval.
+
+### 6. Implement Approved Fixes
+
+Apply only the fixes that were approved by the user in step 5. For each approved fix:
 
 - **Reuse existing code**: Use utilities, hooks, components, constants already in the codebase. Search before writing new code.
 - **Match project conventions**: Follow coding style, naming conventions, and patterns established in the project.
@@ -132,17 +188,9 @@ Apply the change directly to the source code:
 - **Preserve behavior**: Do not break existing functionality or tests.
 - **Apply GitHub suggestions verbatim**: If the reviewer left a `suggestion` block, apply it exactly unless it introduces a bug or violates project conventions.
 
-#### 4e. Record the Outcome
+After implementing each fix, update its status from `Fixable` to `Fixed` or `Partially fixed`.
 
-For each thread, record:
-
-- Thread ID (`id` from GraphQL -- this is the node ID needed for the resolve mutation)
-- File path and line reference
-- Reviewer's request (one-sentence summary)
-- Outcome: `Fixed`, `Not fixable`, `Already addressed`, or `Partially fixed`
-- What was done (for fixes) or why it cannot be done (for non-fixable items)
-
-### 5. Verify Changes
+### 7. Verify Changes
 
 After processing all conversations, verify the changes are sound.
 
@@ -160,11 +208,11 @@ If no verification scripts are found, note this in the report and skip verificat
 
 If verification fails, determine which fix caused the failure. Fix the regression if possible. If a fix cannot be corrected without introducing new issues, revert it and update the thread's outcome to `Not fixable` with the reason (e.g., "Fix caused type error; reverted").
 
-### 6. Reply to Threads and Resolve on GitHub
+### 8. Reply to Threads and Resolve on GitHub
 
 For each thread that was `Fixed` or `Already addressed`, post a reply and resolve it on GitHub. This closes the feedback loop for the reviewer.
 
-#### 6a. Reply to the Thread
+#### 8a. Reply to the Thread
 
 Post a concise reply explaining what was done. Use the first comment's `databaseId` (numeric ID) from the thread to reply -- do not use the GraphQL node `id`:
 
@@ -180,7 +228,7 @@ Reply format by outcome:
 
 Do not reply to `Not fixable` or `Partially fixed` threads -- those need human follow-up.
 
-#### 6b. Resolve the Thread
+#### 8b. Resolve the Thread
 
 After replying, resolve the thread using its GraphQL node ID (the `id` field from the review thread data):
 
@@ -196,7 +244,7 @@ gh api graphql -f query='
 
 If the resolve mutation fails (e.g., permissions), log the failure but do not abort. The reply is still valuable even if auto-resolve is not possible.
 
-### 7. Report to User
+### 9. Report to User
 
 Present a summary using the PR metadata from the JSON output:
 
@@ -226,7 +274,7 @@ For each "Not fixable" conversation, explain clearly enough that the user can fo
 List threads that were replied to and resolved via the API. If any resolve mutations failed, note which threads could not be auto-resolved.
 ```
 
-### 8. Prompt User for Next Steps
+### 10. Prompt User for Next Steps
 
 After presenting the report, ask the user:
 
@@ -236,7 +284,7 @@ After presenting the report, ask the user:
 
 Do not commit or push automatically -- wait for the user's decision.
 
-### 9. Restore Working Tree
+### 11. Restore Working Tree
 
 **Only if a branch checkout was performed in Step 1** (i.e., the user provided a specific PR number/URL and the original branch was different). If the current branch was already the PR branch, skip this step.
 
