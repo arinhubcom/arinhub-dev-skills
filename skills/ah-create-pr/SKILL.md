@@ -1,12 +1,12 @@
 ---
 name: ah-create-pr
-description: Use this skill to create a GitHub Pull Request when using the "ah" prefix. Use when asked to "ah create pr", "ah create pull request", or "ah pr". Analyzes the current branch, runs quality checks, generates a well-structured PR with summary, changes, tests, and linked issues, then creates it via `gh pr create`.
+description: Use this skill to create or update a GitHub Pull Request when using the "ah" prefix. Use when asked to "ah create pr", "ah create pull request", or "ah pr". Analyzes the current branch, runs quality checks, generates a well-structured PR with summary, changes, tests, and linked issues. If an open PR already exists for the branch, updates it via `gh pr edit`; otherwise creates a new one via `gh pr create`.
 argument-hint: "base branch, issue number, labels"
 ---
 
-# Create GitHub Pull Request
+# Create or Update GitHub Pull Request
 
-Analyze the current branch and create a well-structured GitHub Pull Request. The diff against the base branch is the single source of truth for all PR content.
+Analyze the current branch and create or update a well-structured GitHub Pull Request. If an open PR already exists for the current branch, it is updated instead of creating a duplicate. The diff against the base branch is the single source of truth for all PR content.
 
 ## Input
 
@@ -46,7 +46,14 @@ git log origin/${BASE_BRANCH}..HEAD --no-decorate
 
 # Branch tracking status
 git status -sb
+
+# Check for existing open PR on this branch
+EXISTING_PR_NUMBER=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json number --jq '.[0].number')
+EXISTING_PR_URL=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json url --jq '.[0].url')
+EXISTING_PR_BASE=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json baseRefName --jq '.[0].baseRefName')
 ```
+
+If an open PR already exists for the current branch, the skill will update it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing.
 
 If the user provided an issue number, use it for the PR references. Do not infer issue numbers from the branch name or commit messages.
 
@@ -144,7 +151,39 @@ Push the branch to the remote if it has not been pushed yet or is behind:
 git push -u origin ${CURRENT_BRANCH}
 ```
 
-Then create the PR (include `--label` flags for each determined label):
+#### If an open PR already exists (`EXISTING_PR_NUMBER` is set)
+
+Update the existing PR with the newly generated content:
+
+```bash
+gh pr edit ${EXISTING_PR_NUMBER} \
+  --title "<type>: <brief description>" \
+  --add-label "<label1>" --add-label "<label2>" \
+  --body "$(cat <<'EOF'
+## Summary
+
+<2-4 sentence explanation of what this PR does and why>
+
+## Changes
+
+<bullet points from step 3>
+
+## Tests
+
+<test coverage details from step 3>
+
+## GH
+
+<closing keywords from step 3>
+EOF
+)"
+```
+
+Omit `--add-label` flags entirely if no labels were determined.
+
+#### If no open PR exists
+
+Create a new PR (include `--label` flags for each determined label):
 
 ```bash
 gh pr create \
@@ -176,13 +215,14 @@ Omit `--label` flags entirely if no labels were determined.
 
 ### 5. Report to User
 
-After creating the PR, provide:
+After creating or updating the PR, provide:
 
-1. **PR URL** -- direct link to the created pull request
-2. **Summary** -- brief recap of what was included
-3. **Labels** -- list the labels applied and briefly explain why each was chosen (or note that none were applicable)
-4. **Action Items** -- any TODOs or follow-ups identified
-5. **Review Checklist** -- quick reminders for self-review before requesting reviewers
+1. **PR URL** -- direct link to the created or updated pull request
+2. **Status** -- whether the PR was **created** or **updated** (existing PR detected)
+3. **Summary** -- brief recap of what was included
+4. **Labels** -- list the labels applied and briefly explain why each was chosen (or note that none were applicable)
+5. **Action Items** -- any TODOs or follow-ups identified
+6. **Review Checklist** -- quick reminders for self-review before requesting reviewers
 
 ## Validation Checks
 
@@ -199,6 +239,7 @@ Before submitting the PR, verify:
 - If no base branch was provided, STOP and ask the user for it
 - If no commits exist ahead of the base branch, abort and inform user
 - If diff is empty, check for unstaged changes and prompt user
+- If an existing open PR targets a different base branch than the user provided, warn the user and ask whether to update the existing PR's base or create a new PR
 
 ## Best Practices
 
