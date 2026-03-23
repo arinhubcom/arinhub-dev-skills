@@ -14,6 +14,14 @@ Resolve unresolved review conversations on a pull request by reading each commen
 
 ## Procedure
 
+### 0. Initialize
+
+```bash
+REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
+PLANS_DIR=~/.agents/arinhub/plans
+mkdir -p "${PLANS_DIR}"
+```
+
 ### 1. Checkout PR Branch and Fetch Data
 
 Before doing anything, save the current branch and stash state so they can be restored later:
@@ -59,6 +67,12 @@ The script outputs a JSON object containing:
 - `linked_issues` -- full details of linked issues
 
 Store this JSON for use in subsequent steps. No additional API calls are needed for data collection.
+
+Set `PR_NUMBER` for use in later steps. If the user provided a PR number or URL as input, use that value. Otherwise, extract it from the JSON output:
+
+```bash
+PR_NUMBER=<user-provided value or pull_request.number from JSON>
+```
 
 ### 2. Validate PR State
 
@@ -144,7 +158,15 @@ For each thread, record:
 
 ### 5. Present Fix Plan for Approval
 
-Present the complete fix plan to the user for review before making any code changes. Format the plan clearly:
+#### 5a. Save Plan to File
+
+Assemble the plan file path:
+
+```bash
+PLAN_FILE="${PLANS_DIR}/plan-resolve-pr-review-${REPO_NAME}-${PR_NUMBER}.md"
+```
+
+Write the complete fix plan to `${PLAN_FILE}` using this format:
 
 ```markdown
 ## Fix Plan: PR #<number>
@@ -165,9 +187,39 @@ Present the complete fix plan to the user for review before making any code chan
 | 3 | `src/api.ts` | 30 | @reviewer | Unclear naming suggestion | Question without clear direction; needs clarification |
 ```
 
-Use the **AskUserQuestion** tool to present the plan and ask for approval:
+Display only a link to the file in chat:
 
-- Present the formatted plan above.
+```
+Plan saved to: ${PLAN_FILE}
+```
+
+#### 5b. Validate Plan
+
+Spawn a **plan-validator** subagent (Sonnet) with the following instructions:
+
+1. Read the plan file at `${PLAN_FILE}`
+2. Collect relevant `AGENTS.md` files: for each file path referenced in the plan, walk up from that file's directory to the repository root, collecting any `AGENTS.md` found along the way. Deduplicate the results (the root `AGENTS.md` will appear for every path).
+3. Read each collected `AGENTS.md` file
+4. Review the plan for:
+   - Errors (incorrect file paths, wrong line references, invalid thread IDs)
+   - Inconsistencies (conflicting planned changes, duplicate entries)
+   - Missing or ambiguous information (vague planned changes, missing context)
+   - Logical problems (fixes that contradict each other or the linked issue)
+   - Violations of any rules or conventions found in `AGENTS.md` files
+5. Return a structured list of findings with the fix number and description of each issue, or confirm that no issues were found
+
+#### 5c. Fix Validation Issues
+
+After the validator subagent returns, review its findings:
+
+- If issues were found, update `${PLAN_FILE}` to correct them before proceeding.
+- If no issues were found, proceed directly to approval.
+
+#### 5d. Ask for Approval
+
+Use the **AskUserQuestion** tool to ask the user for approval:
+
+- Reference the plan file path (`${PLAN_FILE}`)
 - Ask: "Do you approve this fix plan? You can approve all, reject all, or specify which fixes to skip by number (e.g., 'approve all except #2')."
 - Wait for the user's response before proceeding.
 
@@ -176,7 +228,7 @@ Handle the user's response:
 - **Approve all**: Proceed to step 6 with all fixable threads.
 - **Approve with exclusions**: Remove the excluded fixes from the implementation list and proceed with the rest.
 - **Reject all**: Skip to step 9 (Report) and present only the analysis without any code changes.
-- **Request changes to the plan**: Update the plan based on the user's feedback and present it again for approval.
+- **Request changes to the plan**: Update `${PLAN_FILE}` based on the user's feedback and present it again for approval.
 
 ### 6. Implement Approved Fixes
 
