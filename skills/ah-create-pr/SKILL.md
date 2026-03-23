@@ -80,56 +80,7 @@ If the user provided labels, use them as-is. Otherwise, auto-detect labels by an
 
 ### 3. Generate PR Content
 
-#### Summary
-
-- Parse branch name and commit messages to understand the change intent.
-- If the user provided an issue number, retrieve its context and write a clear, standalone explanation (2-4 sentences). Never just say "Fixes #XXX" without explaining what the issue was about.
-
-#### Changes
-
-For each logical group of changes, write a bullet point describing:
-
-- What was changed (component/file/feature area)
-- Why it was changed (how it contributes to the Summary)
-- Brief technical approach if complex
-
-Every significant diff block from `git diff origin/${BASE_BRANCH}...HEAD` must be represented. The diff is the single source of truth. Explicitly note if any changes seem unrelated to the main purpose.
-
-Do not link to files or code snippets in the Changes section.
-
-Example format:
-
-```markdown
-- **Added new help-circle icon** (`src/icons/help-circle.svg`)
-  - Consistent with existing icon style (24x24 SVG with animated strokes)
-  - Question mark in circle design for FAQ functionality
-
-- **Modified AppLayout sidebar menu** (`src/layouts/AppLayout/index.tsx`)
-  - Replaced contact button with FAQ link that opens in a new tab
-  - Added `rel="noopener noreferrer"` for security best practices
-```
-
-#### Tests
-
-- List which existing tests should be affected based on the changes.
-- Identify whether new functionality requires new tests and whether they are included.
-- Check for `.test.ts`, `.spec.ts`, or test-related changes in the diff.
-- Flag if new functionality lacks test coverage.
-- Include manual testing steps if relevant.
-
-Example format:
-
-```markdown
-- **Manual Testing Required**: Verify the fix works by:
-  1. Step one
-  2. Step two
-  3. Step three
-- **Automated Tests**: Description of test coverage status
-```
-
-#### GH (GitHub References)
-
-If the user provided an issue number, include closing keywords with proper syntax: `Fixes #123`, `Closes #456`, `Resolves #789`. If no issue number was provided, omit this section entirely from the PR body.
+Read the PR body template from [references/pr-body.md](references/pr-body.md) and follow its structure and rules exactly.
 
 ### 4. Create Pull Request
 
@@ -160,21 +111,7 @@ gh pr edit ${EXISTING_PR_NUMBER} \
   --title "<type>: <brief description>" \
   --add-label "<label1>" --add-label "<label2>" \
   --body "$(cat <<'EOF'
-## Summary
-
-<2-4 sentence explanation of what this PR does and why>
-
-## Changes
-
-<bullet points from step 3>
-
-## Tests
-
-<test coverage details from step 3>
-
-## GH
-
-<closing keywords from step 3>
+<PR body from references/pr-body.md>
 EOF
 )"
 ```
@@ -192,21 +129,7 @@ gh pr create \
   --title "<type>: <brief description>" \
   --label "<label1>" --label "<label2>" \
   --body "$(cat <<'EOF'
-## Summary
-
-<2-4 sentence explanation of what this PR does and why>
-
-## Changes
-
-<bullet points from step 3>
-
-## Tests
-
-<test coverage details from step 3>
-
-## GH
-
-<closing keywords from step 3>
+<PR body from references/pr-body.md>
 EOF
 )"
 ```
