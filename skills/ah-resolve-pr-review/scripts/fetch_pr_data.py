@@ -43,6 +43,7 @@ query(
           id
           isResolved
           isOutdated
+          subjectType
           path
           line
           startLine
@@ -54,6 +55,7 @@ query(
           comments(first: 100) {
             nodes {
               id
+              databaseId
               body
               diffHunk
               createdAt
@@ -232,6 +234,38 @@ def fetch_review_threads(
 
 
 # ---------------------------------------------------------------------------
+# Paginated REST response parser
+# ---------------------------------------------------------------------------
+def _parse_paginated_array(text: str) -> list[Any]:
+    """Parse potentially concatenated JSON arrays from gh api --paginate.
+
+    gh outputs concatenated results which may be a single merged array or
+    multiple arrays separated by newlines. Handle both cases.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    try:
+        result = json.loads(text)
+        return result if isinstance(result, list) else [result]
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        items: list[Any] = []
+        idx = 0
+        while idx < len(text):
+            remaining = text[idx:].lstrip()
+            if not remaining:
+                break
+            obj, end = decoder.raw_decode(remaining)
+            if isinstance(obj, list):
+                items.extend(obj)
+            else:
+                items.append(obj)
+            idx = len(text) - len(remaining) + end
+        return items
+
+
+# ---------------------------------------------------------------------------
 # Reviews (REST, paginated)
 # ---------------------------------------------------------------------------
 def fetch_reviews(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
@@ -242,7 +276,7 @@ def fetch_reviews(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
             "--paginate",
         ]
     )
-    return json.loads(out) if out.strip() else []
+    return _parse_paginated_array(out)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +292,7 @@ def fetch_conversation_comments(
             "--paginate",
         ]
     )
-    return json.loads(out) if out.strip() else []
+    return _parse_paginated_array(out)
 
 
 # ---------------------------------------------------------------------------

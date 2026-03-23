@@ -51,7 +51,9 @@ The script outputs a JSON object containing:
 
 - `pull_request` -- metadata: `number`, `title`, `body`, `url`, `state`, `base_branch`, `head_branch`, `files`, `owner`, `repo`
 - `diff` -- full PR diff as a string
-- `review_threads` -- object with `total`, `unresolved_count`, `resolved_count`, `unresolved` (array of thread objects with `id`, `isResolved`, `isOutdated`, `path`, `line`, `startLine`, `diffSide`, `comments`), `resolved`
+- `review_threads` -- object with `total`, `unresolved_count`, `resolved_count`, `unresolved` (array of thread objects), `resolved`
+  - Thread fields: `id` (GraphQL node ID for resolve mutation), `isResolved`, `isOutdated`, `subjectType` (`LINE` or `FILE`), `path`, `line`, `startLine`, `diffSide`, `startDiffSide`, `originalLine`, `originalStartLine`, `resolvedBy`
+  - Comment fields: `id` (GraphQL node ID), `databaseId` (numeric -- use for REST API replies), `body`, `diffHunk`, `createdAt`, `updatedAt`, `author`, `path`, `originalPosition`
 - `reviews` -- simplified review submissions
 - `conversation_comments` -- simplified issue comments
 - `linked_issues` -- full details of linked issues
@@ -86,7 +88,9 @@ Read key config files relevant to the changes (`package.json`, `tsconfig.json`, 
 
 Group the unresolved threads by `path` (file) so each file is read once and all related threads are processed together. This avoids redundant file reads and helps maintain consistency across fixes in the same file.
 
-For each file group, read the file once, then process each thread in the group:
+For each file group, read the file once, then process each thread in the group.
+
+**File-level threads** (`subjectType` is `FILE`): These comments apply to the file as a whole, not a specific line. The `line` and `startLine` fields will be `null`. Skip the line-location logic in step 4a and treat the entire file as the context. The reviewer's comment body is the sole guide for what needs to change.
 
 #### 4a. Check if Thread is Outdated
 
@@ -162,10 +166,10 @@ For each thread that was `Fixed` or `Already addressed`, post a reply and resolv
 
 #### 6a. Reply to the Thread
 
-Post a concise reply explaining what was done. Use the first comment's `id` from the thread to reply:
+Post a concise reply explaining what was done. Use the first comment's `databaseId` (numeric ID) from the thread to reply -- do not use the GraphQL node `id`:
 
 ```bash
-gh api repos/<owner>/<repo>/pulls/<pr_number>/comments/<comment_id>/replies \
+gh api repos/<owner>/<repo>/pulls/<pr_number>/comments/<database_id>/replies \
   -f body="<reply_message>"
 ```
 
