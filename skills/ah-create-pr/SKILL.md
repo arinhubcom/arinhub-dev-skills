@@ -20,6 +20,17 @@ Analyze the current branch and create or update a well-structured GitHub Pull Re
 
 ### 0. Preparation
 
+Verify GitHub CLI authentication and check for uncommitted changes before proceeding.
+
+```bash
+gh auth status
+
+# Warn if there are uncommitted changes that won't be included in the PR
+git status --porcelain
+```
+
+If `gh auth status` fails, stop and ask the user to authenticate with `gh auth login`. If there are uncommitted changes (staged or unstaged), warn the user that these changes will not be included in the PR and ask whether to continue or wait.
+
 Run quality checks to catch issues before creating the PR. If any check fails, report the failure and ask the user how to proceed.
 
 ```bash
@@ -37,12 +48,16 @@ If the user did not provide a base branch, STOP and ask for it before proceeding
 BASE_BRANCH=<user-provided base branch>
 CURRENT_BRANCH=$(git branch --show-current)
 
-# Full diff against base (primary source of truth)
-git diff origin/${BASE_BRANCH}...HEAD --stat
-git diff origin/${BASE_BRANCH}...HEAD
+# Compute merge base for reliable diffing (works even if origin isn't fetched)
+git fetch origin "${BASE_BRANCH}" --quiet
+MERGE_BASE=$(git merge-base "origin/${BASE_BRANCH}" HEAD)
+
+# Full diff against merge base (primary source of truth)
+git diff "${MERGE_BASE}" --stat
+DIFF=$(git diff "${MERGE_BASE}")
 
 # Commit history on this branch
-git log origin/${BASE_BRANCH}..HEAD --no-decorate
+git log "${MERGE_BASE}"..HEAD --no-decorate
 
 # Branch tracking status
 git status -sb

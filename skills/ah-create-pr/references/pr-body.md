@@ -17,7 +17,7 @@ Read this template before composing the PR body. Follow its structure exactly.
 - Why it was changed (how it contributes to the Summary)
 - Brief technical approach if complex
 
-Every significant diff block from `git diff origin/${BASE_BRANCH}...HEAD` must be represented. The diff is the single source of truth. Explicitly note if any changes seem unrelated to the main purpose. Do not link to files or code snippets.>
+Every significant diff block in `${DIFF}` must be represented. The diff is the single source of truth. Explicitly note if any changes seem unrelated to the main purpose. Do not link to files or code snippets.>
 
 Example:
 
