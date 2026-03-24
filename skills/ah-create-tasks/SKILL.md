@@ -35,10 +35,11 @@ Verify that `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If 
 
 ### 1. Specify
 
-Read `prd.md` and distill it into a prompt for the `/speckit.specify` command. The prompt should focus on **what** and **why** -- strip out tech stack details, implementation specifics, and architecture choices. Keep only the user-facing requirements, goals, and motivation.
+Read `prd.md` at `${PRD_PATH}` and distill it into a prompt for the `/speckit.specify` command. The prompt should focus on **what** and **why** -- strip out tech stack details, implementation specifics, and architecture choices. Keep only the user-facing requirements, goals, motivation, and any relevant context that would be important for a specifier to know when writing the initial `spec.md`. The goal is to create a clear and concise prompt that captures the essence of the feature without prescribing how it should be implemented.
 
 Spawn subagent **specifier** (Opus, ultrathink):
 
+- Provide `${PRD_PATH}` so the subagent can read the PRD file directly for additional context
 - Run `/speckit.specify` with the distilled prompt
 - After `/speckit.specify` completes, it will have created a new branch. Capture it:
   ```bash
