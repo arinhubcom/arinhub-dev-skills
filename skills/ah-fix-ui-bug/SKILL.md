@@ -6,6 +6,9 @@ argument-hint: "URL or page description, element selector or interaction that tr
 
 # Fix UI Bug with Chrome DevTools CLI
 
+This skill uses the `chrome-devtools-cli` skill for all browser interactions.
+Invoke `/chrome-devtools-cli` if you need help with command syntax or flags.
+
 ## Input
 
 - **Page URL or description** (REQUIRED): The URL, Storybook story, or page description where the bug reproduces (e.g., `http://localhost:6006/iframe.html?id=...`, "Settings page").
@@ -316,7 +319,7 @@ Present findings and resolution:
 
 ## Error Handling
 
-- If Chrome DevTools connection fails, stop and ask the user to ensure Chrome is running with `--remote-debugging-port` enabled
+- If Chrome DevTools connection fails, run `chrome-devtools start` to start the daemon
 - If diagnostic scripts fail to inject (e.g., CSP restrictions), inform the user and suggest disabling CSP in the dev environment
 - If automated clicks don't reproduce the bug, inject the persistent overlay and ask the user to interact manually
 - If element UIDs are stale after page changes, re-take a snapshot with `chrome-devtools take_snapshot`
