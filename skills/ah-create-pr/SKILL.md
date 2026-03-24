@@ -88,7 +88,7 @@ If the user provided labels, use them as-is. Otherwise, auto-detect labels by an
    ```
 2. **Match labels** based on the PR content:
    - **PR title type** -- map the commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `perf`, `chore`) to matching labels (e.g., `feat` -> `feature`/`enhancement`, `fix` -> `bug`/`bugfix`, `docs` -> `documentation`)
-   - **Changed file paths** -- infer domain labels from directories (e.g., changes in `src/api/` -> `api`/`backend`, changes in `src/components/` -> `frontend`/`ui`, changes in `infra/` -> `infrastructure`)
+   - **Changed file paths** -- infer domain labels from directories (e.g., changes in `apps/app-name/` -> `app-name`, changes in `src/api/` -> `api`/`backend`, changes in `src/components/` -> `frontend`/`ui`, changes in `infra/` -> `infrastructure`)
    - **Diff content** -- detect patterns like security fixes, dependency updates, breaking changes, and match to corresponding labels
 3. **Select only labels that exist** in the repository. Never create or suggest labels that do not exist.
 4. **Limit to 1-4 labels** -- pick the most relevant ones. Prefer specific labels over generic ones.
