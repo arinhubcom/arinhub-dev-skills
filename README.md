@@ -24,6 +24,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                               | Orchestrate the full pre-PR finalization: simplify, retrospective, tests, JSDoc, docs, specs, code review, and PR -- committing after each step.  | `"ah finalize code"`, `"ah finalize changes"`                                                                                                                                       |
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.  | `"ah resolve pr review"`                                                                                                                                                            |
 | [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools MCP -- finds timing races between framework DOM cleanup and React re-renders.       | `"ah fix dom flash"`                                                                                                                                                                |
+| [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.          | `"ah fix ui bug"`                                                                                                                                                                   |
 
 ### How to Use `ah-review-code`
 
@@ -66,7 +67,7 @@ Install all required commands and skills:
 
 ```sh
 claude plugin install pr-review-toolkit
-npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash
+npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
 npx skills add google-gemini/gemini-cli -y -g -s code-reviewer
 npx skills add bgauryy/octocode-mcp -y -g -s octocode-roast
 npx skills add millionco/react-doctor -y -g -s react-doctor
@@ -141,3 +142,13 @@ ah fix dom flash, in the widget component, after dragging the chip onto the butt
 ```
 
 Requires Chrome DevTools MCP server connected. The skill injects a flash detector (MutationObserver + requestAnimationFrame), reproduces the interaction via DevTools, and identifies timing races between framework DOM cleanup and React re-renders.
+
+### How to Use `ah-fix-ui-bug`
+
+```sh
+/ah-fix-ui-bug http://localhost:3000/settings, .save-button shifts down after clicking
+# or
+ah fix ui bug http://localhost:6006/iframe.html?id=my-story, the chip lands at wrong position after drag
+```
+
+Requires Chrome DevTools CLI (`chrome-devtools-cli` skill). The skill navigates to the page, takes an a11y snapshot, injects diagnostic scripts (layout shift detection, position tracking, mutation observers), reproduces the interaction, and analyzes collected data to identify the root cause. For single-frame flash/flicker timing races, use `ah-fix-dom-flash` instead.
