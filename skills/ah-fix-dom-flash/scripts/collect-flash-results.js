@@ -1,23 +1,38 @@
 /**
- * Collect Flash Results
+ * Collect Flash Results v2
  *
- * Retrieves the detections recorded by flash-detector.js and stops both the
- * MutationObserver and the rAF loop to prevent further data collection.
+ * Retrieves detections from flash-detector.js, stops the detector, and
+ * returns results separated into high-confidence flashes and lower-confidence
+ * noise. This separation makes it easy to focus on actual flash bugs
+ * without wading through normal DOM activity.
  *
- * Always run this AFTER reproducing the interaction that triggers the flash.
- * The script returns up to 20 detections to avoid overwhelming the output;
- * if the bug produces many events (e.g., continuous animation), increase the
- * slice limit or filter by type.
+ * - `flashes`: position-lost, flash, transform-lost -- these are the bugs
+ * - `noise`: added, attr-change -- may be normal DOM activity, investigate
+ *   only if flashes array is empty
  *
  * @usage chrome-devtools evaluate_script "<content>"
  * @requires flash-detector.js must be injected first.
- * @returns {Object} Detection count and up to 20 detailed entries.
+ * @returns {Object} Separated flash vs noise detections with summary.
  */
 () => {
   const results = window.__flashDetected || [];
   window.__stopFlashDetector?.();
+
+  const summary = {};
+  for (const d of results) {
+    summary[d.type] = (summary[d.type] || 0) + 1;
+  }
+
+  const flashTypes = new Set(['flash', 'position-lost', 'transform-lost']);
+  const flashes = results.filter((d) => flashTypes.has(d.type));
+  const noise = results.filter((d) => !flashTypes.has(d.type));
+
   return {
-    count: results.length,
-    detections: results.slice(0, 20),
+    total: results.length,
+    flashCount: flashes.length,
+    noiseCount: noise.length,
+    summary,
+    flashes: flashes.slice(0, 15),
+    noise: noise.slice(0, 15),
   };
 }

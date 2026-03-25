@@ -1,6 +1,6 @@
 ---
 name: ah-fix-dom-flash
-description: "Use this skill to detect and debug DOM flash/flicker bugs using chrome-devtools CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), or timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements."
+description: "Use this skill to detect and debug DOM flash/flicker bugs using chrome-devtools CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements, opacity/transform jump flashes on mount/unmount, portal content outliving its positioning context, or any single-frame visual glitch after a state change."
 argument-hint: "URL or page description, suspected element selector or interaction type"
 ---
 
@@ -9,19 +9,15 @@ argument-hint: "URL or page description, suspected element selector or interacti
 This skill uses the `chrome-devtools-cli` skill for all browser interactions.
 Invoke `/chrome-devtools-cli` if you need help with command syntax or flags.
 
-Diagnostic scripts are in the `scripts/` directory. To use them: read the
-script file, customize the selector for the specific bug, then pass the
-content to `chrome-devtools evaluate_script`.
-
-Detects elements that briefly appear in wrong positions due to timing races between
-framework-level DOM manipulation (e.g., @dnd-kit, Framer Motion, GSAP) and React's
-async re-render cycle.
+Diagnostic scripts are in `scripts/`. The flash detector is configurable via
+`window.__flashDetectorConfig` -- set it before injecting, no manual script
+editing needed.
 
 ## Input
 
-- **Page URL or description** (REQUIRED): The URL, Storybook story where the bug reproduces, or a description of the page (e.g., "Product page", "Drag-and-drop story").
-- **Suspected element** (optional): CSS selector, component name, or description of the flashing element (e.g., `[data-dnd-overlay]`, "drag overlay", "tooltip").
-- **Interaction type** (optional): What triggers the flash -- drag-and-drop, click, hover, keyboard, or animation.
+- **Page URL or description** (REQUIRED): URL, Storybook story, or page description.
+- **Suspected element** (optional): CSS selector, component name, or description of the flashing element.
+- **Interaction type** (optional): What triggers the flash -- drag-and-drop, click, hover, keyboard, animation, page-load.
 
 ## When to Use
 
@@ -29,19 +25,20 @@ async re-render cycle.
 - Ghost/duplicate element appears briefly after interaction
 - Visual artifact at (0,0), bottom-left, or unexpected position
 - Element loses `position: fixed/absolute` while still having content
-- Any "flicker" or "flash" that happens for one frame after an interaction
+- Opacity flash: element briefly visible at full opacity before transition starts
+- Transform jump: element snaps to wrong position for one frame before animation
+- Portal/overlay content flashes when popover/tooltip/dialog closes
+- Any flicker that happens for one frame after an interaction or state change
 
 ## Procedure
 
 ### 1. Verify Chrome DevTools Connection
 
-Ensure Chrome is running with DevTools protocol enabled.
-
 ```bash
 chrome-devtools list_pages
 ```
 
-If no pages are available, start the daemon:
+If no pages are available:
 
 ```bash
 chrome-devtools start
@@ -49,47 +46,43 @@ chrome-devtools start
 
 ### 2. Navigate and Take Baseline
 
-Navigate to the page or Storybook story where the bug reproduces, then
-capture the initial state.
-
 ```bash
-# Navigate to the page with the bug
 chrome-devtools navigate_page --url "http://localhost:6006/iframe.html?id=..."
-
-# Primary inspection tool -- returns structured a11y tree with element UIDs
 chrome-devtools take_snapshot --verbose true
-
-# Visual screenshot for baseline reference
 chrome-devtools take_screenshot --filePath /tmp/before.png
 ```
 
 The a11y snapshot returns elements like `uid=6_2 button "Apple"`. These UIDs
-are used in subsequent click/hover/drag commands. Always prefer `take_snapshot`
-over `take_screenshot` for debugging -- it provides structured, queryable data.
+are used in subsequent click/hover/drag commands. Prefer `take_snapshot`
+over `take_screenshot` for debugging -- snapshots provide structured data.
 
-### 3. Install Flash Detector
+### 3. Configure and Install Flash Detector
 
-Before reproducing the bug, inject the detector that catches elements appearing
-in wrong positions between frames. This is the critical step.
-
-Read `scripts/flash-detector.js`, customize the `suspects` selector in the rAF
-section if the user provided a suspected element, then inject:
+If the user provided a suspected element selector, configure the detector
+first. This avoids manual code editing -- the script reads the config at
+injection time:
 
 ```bash
-chrome-devtools evaluate_script "<customized flash-detector.js content>"
+chrome-devtools evaluate_script "() => { window.__flashDetectorConfig = { selector: '[data-dnd-overlay]' }; return 'configured'; }"
 ```
 
-Available scripts in `scripts/`:
+Configuration options (all optional):
+- `selector` -- CSS selector for suspected elements. Overrides the default overlay selectors.
+- `maxDetections` -- Maximum entries to record (default: 50).
 
-| Script                       | Purpose                                       | Selector to Customize       |
-| ---------------------------- | --------------------------------------------- | --------------------------- |
-| `flash-detector.js`          | Dual-strategy detector (MutationObserver+rAF) | `suspects` selector in rAF  |
-| `collect-flash-results.js`   | Collects results and stops the detector        | None                        |
-| `lingering-fixed-elements.js`| Scans for leftover fixed-position elements     | None                        |
+Then read `scripts/flash-detector.js` and inject it as-is:
 
-IMPORTANT: If the user provided a suspected element selector, customize the
-`suspects` selector in the rAF loop of `flash-detector.js` to target that
-element specifically.
+```bash
+chrome-devtools evaluate_script "<flash-detector.js content>"
+```
+
+Available scripts:
+
+| Script                       | Purpose                                        | Configure via                  |
+| ---------------------------- | ---------------------------------------------- | ------------------------------ |
+| `flash-detector.js`          | Dual-strategy detector (MutationObserver + rAF)| `window.__flashDetectorConfig` |
+| `collect-flash-results.js`   | Collects, deduplicates, and summarizes results  | None                           |
+| `lingering-fixed-elements.js`| Scans for leftover fixed/absolute elements      | None                           |
 
 ### 4. Reproduce the Interaction
 
@@ -109,35 +102,59 @@ chrome-devtools hover "<uid>" --includeSnapshot true
 chrome-devtools press_key "<key>"
 ```
 
+Flash bugs are timing-dependent. If the first attempt shows zero detections,
+repeat the interaction 2-3 more times *without* re-injecting the detector.
+It stays active and accumulates results across multiple interactions.
+
+Note: The detector stays active until you inject `collect-flash-results.js`,
+which stops it. If you need another detection round after collecting, you
+must re-inject the detector (and optionally the config) before reproducing
+again.
+
 ### 5. Collect Results
 
-After the interaction, read `scripts/collect-flash-results.js` and inject it:
+Read `scripts/collect-flash-results.js` and inject it:
 
 ```bash
 chrome-devtools evaluate_script "<collect-flash-results.js content>"
 ```
 
-Expected output:
+The collector separates results into high-confidence flashes and lower-confidence noise:
 
 ```json
-{ "count": 3, "detections": [ ... ] }
+{
+  "total": 5,
+  "flashCount": 2,
+  "noiseCount": 3,
+  "summary": { "position-lost": 1, "flash": 1, "added": 2, "attr-change": 1 },
+  "flashes": [ ... ],
+  "noise": [ ... ]
+}
 ```
+
+Focus on the `flashes` array -- these are actual flash bugs. The `noise`
+array contains MutationObserver events that may be normal DOM activity;
+only investigate these if `flashes` is empty and the user reports a visible
+flash.
 
 ### 6. Analyze Findings
 
-Key indicators in the results:
+**High-confidence indicators** (in `flashes`):
 
-| Finding                               | Meaning                                                                      |
-| ------------------------------------- | ---------------------------------------------------------------------------- |
-| `type: "flash"`, `position: "static"` | Element lost fixed/absolute positioning but still has content -- TIMING RACE |
-| `rect.y` beyond widget bounds         | Element fell into normal document flow below the component                   |
-| `rect.x: 0, rect.y: 0`                | Element snapped to top-left default position                                 |
-| `text` contains component content     | Confirms it is the ghost element, not a structural div                       |
-| Multiple detections at same `time`    | Single frame where the bug manifests                                         |
+| Finding                                 | Meaning                                                |
+| --------------------------------------- | ------------------------------------------------------ |
+| `type: "position-lost"`                 | Element was fixed/absolute, became static -- FLASH BUG |
+| `type: "flash"`, position is `"static"` | Overlay has content without positioning                 |
+| `type: "transform-lost"` at (0,0)       | Animation cleared transform before unmount              |
 
-If zero detections are found, try reproducing the interaction again or adjust
-the detector selector in Step 3. The flash may be too fast for the rAF loop --
-consider using a Performance trace instead:
+**Lower-confidence indicators** (in `noise`):
+
+| Finding                                 | Meaning                                                |
+| --------------------------------------- | ------------------------------------------------------ |
+| `type: "added"` with `suspicious: true` | New element at (0,0) or off-viewport -- investigate     |
+| `type: "attr-change"` on overlay        | Framework changed attributes -- may be normal           |
+
+If zero flashes after 3 attempts, use a Performance trace:
 
 ```bash
 chrome-devtools performance_start_trace --filePath /tmp/trace.json
@@ -145,77 +162,56 @@ chrome-devtools performance_start_trace --filePath /tmp/trace.json
 chrome-devtools performance_stop_trace --filePath /tmp/trace.json
 ```
 
-### 7. Inspect Current DOM State
+### 7. Inspect Lingering Elements
 
-After the interaction, check for lingering elements by reading
-`scripts/lingering-fixed-elements.js` and injecting it:
+After the interaction, check for leftover positioned elements:
 
 ```bash
 chrome-devtools evaluate_script "<lingering-fixed-elements.js content>"
 ```
 
+This reports both `position: fixed` elements and `position: absolute`
+elements with `z-index > 100`. Compare against the page's expected
+fixed elements (navbar, toast) to identify ghost leftovers.
+
 ### 8. Identify Root Cause
 
-Match findings against these common root causes:
+Match findings to a root cause pattern. For detailed patterns and
+framework-specific fixes, read `references/root-causes.md`.
 
-#### 8a. Framework cleanup vs React re-render race
+Quick reference:
 
-**Pattern**: Library (e.g., @dnd-kit, Radix) synchronously removes positioning
-attributes/styles from an overlay element, but React asynchronously clears
-the overlay's children on the next render cycle. For one frame, the element
-has content but no positioning.
-
-**Fix**: Hide the element via CSS when the library's attribute is absent:
-
-```css
-/* Example for @dnd-kit */
-[data-dnd-overlay]:not([data-dnd-dragging]) { display: none; }
-
-/* As Tailwind class */
-className="[&:not([data-dnd-dragging])]:hidden"
-```
-
-#### 8b. flushSync vs async setState race
-
-**Pattern**: One part of the system uses `flushSync` (synchronous render) while
-another uses normal `setState` (async). The sync part completes first, showing
-an intermediate state.
-
-**Fix**: Ensure both state changes happen in the same render pass, or hide
-the element at the CSS level.
-
-#### 8c. Drop animation clearing transform before unmount
-
-**Pattern**: A drop animation or `dropAnimation: null` config removes
-`position: fixed` / `transform` from an overlay before React unmounts it.
-
-**Fix**: Use CSS to hide the overlay when the positioning attribute is removed,
-rather than relying on React unmount timing.
-
-#### 8d. Portal/overlay content outliving its positioning context
-
-**Pattern**: A portal renders content outside the component tree. When the
-positioning context is removed (e.g., popover closes), the portal content
-briefly appears in document flow.
-
-**Fix**: Add `display: none` fallback when the positioning attribute is absent.
+| Pattern | Trigger | Key Signal | Fix Strategy |
+| ------- | ------- | ---------- | ------------ |
+| Framework cleanup vs React re-render | dnd-kit, Radix, Floating UI | `position-lost` | CSS: hide when positioning attr absent |
+| flushSync vs async setState | Mixed sync/async updates | Intermediate state visible | Batch into single render pass |
+| Drop animation clearing transform | dnd-kit drop, Framer exit | `transform-lost` at (0,0) | CSS: hide when transform absent |
+| Portal outliving positioning context | Popover/tooltip close | `flash` on portal element | CSS: `display: none` when empty |
+| Opacity transition initial flash | Mount animations | Element visible before transition | Set `opacity: 0` in CSS, not JS |
+| AnimatePresence exit timing | Framer Motion unmount | Ghost during exit animation | `mode="wait"` or `onExitComplete` |
+| GSAP timeline vs React unmount | GSAP .kill() timing | Element at default position | `useLayoutEffect` cleanup |
+| Suspense/lazy FOUC | Code splitting | Unstyled content flash | Matching Suspense fallback layout |
+| Z-index pop-through | Reorder, modal stacking | Element briefly behind another | CSS z-index + `will-change: transform` |
 
 ### 9. Verify Fix
 
-After applying a fix, re-run Steps 3-5 to confirm zero flash detections:
+After applying a fix, reload and re-run the full detection cycle:
 
 ```bash
-# Reload the page
 chrome-devtools navigate_page --url "..."
-
-# Take snapshot to get fresh UIDs
 chrome-devtools take_snapshot --verbose true
 
-# Re-inject flash detector, reproduce, collect results
+# Optionally re-configure
+chrome-devtools evaluate_script "() => { window.__flashDetectorConfig = { selector: '...' }; return 'ok'; }"
+
+# Inject detector
 chrome-devtools evaluate_script "<flash-detector.js content>"
-# ... reproduce interaction ...
+
+# Reproduce interaction 2-3 times
+# ...
+
+# Collect -- expect zero flashes
 chrome-devtools evaluate_script "<collect-flash-results.js content>"
-# Expected: { "count": 0, "detections": [] }
 
 # Visual confirmation
 chrome-devtools take_screenshot --filePath /tmp/after-fix.png
@@ -223,31 +219,19 @@ chrome-devtools take_screenshot --filePath /tmp/after-fix.png
 
 ### 10. Report to User
 
-Present findings and resolution:
-
-- **Flash detected**: Yes/No, with count and summary of detections
-- **Root cause**: Which pattern from Step 8 matched (or unknown if none matched)
-- **Fix applied**: Description of the CSS/code change made
-- **Verification**: Whether re-run of detector confirmed zero detections
-- **Screenshot**: Before and after screenshots for visual confirmation
+- **Flash detected**: Yes/No, with count and summary from collector
+- **Root cause**: Which pattern matched (reference Step 8 table)
+- **Fix applied**: Description of the CSS/code change
+- **Verification**: Whether re-run confirmed zero flash detections
+- **Screenshots**: Before and after for visual confirmation
 
 ## Error Handling
 
-- If Chrome DevTools connection fails, run `chrome-devtools start` to start the daemon
-- If the flash detector script fails to inject (e.g., CSP restrictions), inform the user and suggest disabling CSP in the dev environment
-- If zero detections after multiple reproduction attempts, suggest using Performance traces or manual frame-stepping instead
-- If the interaction tool fails (e.g., element UID not found), re-take a snapshot with `chrome-devtools take_snapshot`
-
-## Important Notes
-
-- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots are only needed for visual confirmation.
-- The flash detector uses both MutationObserver and requestAnimationFrame strategies. MutationObserver catches DOM changes synchronously, while rAF catches visual states between render frames.
-- The rAF loop `suspects` selector must be customized for the specific element causing the flash. The default selector targets common overlay/portal patterns.
-- Flash bugs are timing-dependent -- they may not reproduce consistently. Run the detection cycle 2-3 times before concluding there is no issue.
-- CSS-level fixes (hiding elements when attributes are absent) are preferred over JavaScript fixes because they prevent the flash at the render level rather than cleaning up after it.
-- The detector captures up to 20 detections to avoid memory issues. If the bug produces many events (e.g., continuous animation), increase the slice limit or filter by `type`.
-- All JavaScript snippets use `chrome-devtools evaluate_script`. The function must be an arrow function returning a JSON-serializable value.
-- Selectors in script files are placeholders -- customize them for the specific bug before injecting.
+- Chrome DevTools connection fails: run `chrome-devtools start`
+- Flash detector fails to inject (CSP): suggest disabling CSP in dev environment
+- Zero detections after 3+ attempts: use Performance traces or manual frame-stepping
+- Element UID not found: re-take snapshot with `chrome-devtools take_snapshot`
+- Script returns undefined: ensure the script is wrapped as an arrow function `() => { ... }`
 
 ## Quick Reference
 

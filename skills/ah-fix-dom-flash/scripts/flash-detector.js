@@ -1,81 +1,151 @@
 /**
- * Flash Detector
+ * Flash Detector v2
  *
- * DOM flash/flicker bugs happen when a framework (e.g., @dnd-kit, Framer Motion,
- * Radix) synchronously removes positioning attributes from an overlay element,
- * but React asynchronously clears the overlay's children on the next render
- * cycle. For one frame the element has content but no positioning, so it falls
- * into normal document flow and flashes at (0,0) or at the bottom of the page.
+ * Detects DOM flash/flicker bugs -- elements that briefly appear in wrong
+ * positions due to timing races between framework DOM manipulation and
+ * React's async re-render cycle.
  *
- * This script combines two detection strategies because each catches different
- * classes of flashes:
+ * Two detection strategies run in parallel:
  *
- * 1. MutationObserver -- fires synchronously on DOM changes, catching added
- *    nodes and attribute mutations on fixed/absolute elements the instant they
- *    happen. Good for detecting framework-level attribute removals.
+ * 1. MutationObserver -- fires synchronously on DOM changes. Only reports
+ *    elements that match overlay/portal patterns, have fixed/absolute
+ *    positioning, or appear at suspicious positions (0,0 / off-viewport).
+ *    This filters out normal DOM activity that the v1 detector over-reported.
  *
- * 2. requestAnimationFrame loop -- runs between render frames, catching visual
- *    states where an overlay/portal element has content but lost its positioning
- *    (position:static with children). Good for detecting the one-frame flash
- *    itself, which MutationObserver alone may miss if the positioning was
- *    removed via a class toggle rather than an inline style change.
+ * 2. requestAnimationFrame loop -- runs between render frames. Tracks
+ *    which elements were previously positioned (fixed/absolute) and detects
+ *    when they lose positioning while still having visible content. Also
+ *    catches overlay elements that have content but no positioning (the
+ *    classic one-frame flash).
  *
- * The detector stores all findings in window.__flashDetected and provides a
- * cleanup function at window.__stopFlashDetector. Always inject BEFORE
- * reproducing the interaction, then collect results AFTER.
+ * Deduplication: Each unique element + detection type combination is
+ * reported only once. This prevents the flood of duplicate entries that
+ * made v1 results hard to interpret.
  *
- * @customize Change the `suspects` selector in the rAF section to target the
- *   specific element causing the flash (e.g., '[data-dnd-overlay]').
+ * @configure Set window.__flashDetectorConfig BEFORE injecting this script:
+ *   window.__flashDetectorConfig = {
+ *     selector: '[data-my-overlay]',  // CSS selector for suspected element
+ *     maxDetections: 50,              // max entries to record (default: 50)
+ *   }
  * @usage chrome-devtools evaluate_script "<content>"
  * @global {Array} window.__flashDetected - Collected flash detection entries.
  * @global {Function} window.__stopFlashDetector - Call to stop both observers.
- * @returns {string} Confirmation message.
+ * @returns {string} Confirmation message with active configuration.
  */
 () => {
+  const config = window.__flashDetectorConfig || {};
+  const CUSTOM_SELECTOR = config.selector || '';
+  const MAX_DETECTIONS = config.maxDetections || 50;
+
   window.__flashDetected = [];
+  const seenKeys = new Set();
   let running = true;
 
-  // Strategy 1: MutationObserver for attribute/style changes
+  function fingerprint(el, type) {
+    const rect = el.getBoundingClientRect();
+    const x = Math.round(rect.x / 5) * 5;
+    const y = Math.round(rect.y / 5) * 5;
+    return `${type}|${el.tagName}|${(el.className || '').toString().substring(0, 50)}|${x},${y}`;
+  }
+
+  function record(entry, el) {
+    if (window.__flashDetected.length >= MAX_DETECTIONS) return;
+    const key = fingerprint(el, entry.type);
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    window.__flashDetected.push(entry);
+  }
+
+  const OVERLAY_SELECTORS = [
+    '[data-dnd-overlay]',
+    '[data-radix-popper-content-wrapper]',
+    '[data-radix-portal]',
+    '[data-floating-ui-portal]',
+    '[data-framer-portal]',
+    '[role="dialog"]',
+    '[role="tooltip"]',
+    '[role="menu"]',
+    '[role="listbox"]',
+  ].join(', ');
+
+  function isOverlayElement(el) {
+    try {
+      if (CUSTOM_SELECTOR && el.matches(CUSTOM_SELECTOR)) return true;
+      return el.matches(OVERLAY_SELECTORS);
+    } catch {
+      return false;
+    }
+  }
+
+  function isSuspiciousPosition(rect) {
+    return (
+      (rect.x === 0 && rect.y === 0 && rect.width > 0) ||
+      rect.y > window.innerHeight ||
+      rect.x < -10 ||
+      rect.y < -10
+    );
+  }
+
+  // --- Strategy 1: MutationObserver ---
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
-      // Check added nodes
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
         const el = node;
-        const rect = el.getBoundingClientRect();
         const computed = window.getComputedStyle(el);
-        if (rect.height > 0 && computed.display !== 'none') {
-          window.__flashDetected.push({
-            type: 'added',
-            source: 'mutation',
-            time: performance.now(),
-            tag: el.tagName,
-            className: (el.className || '').substring(0, 150),
-            position: computed.position,
-            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-            text: el.textContent?.substring(0, 60),
-          });
+        if (computed.display === 'none') continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.height <= 0) continue;
+
+        const isOverlay = isOverlayElement(el);
+        const isPositioned =
+          computed.position === 'fixed' || computed.position === 'absolute';
+        const suspicious = isSuspiciousPosition(rect);
+
+        if (isOverlay || isPositioned || suspicious) {
+          record(
+            {
+              type: 'added',
+              source: 'mutation',
+              time: performance.now(),
+              tag: el.tagName,
+              className: (el.className || '').toString().substring(0, 150),
+              position: computed.position,
+              rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+              text: el.textContent?.substring(0, 60),
+              suspicious,
+            },
+            el,
+          );
         }
       }
-      // Check style/attribute changes on fixed/absolute elements
+
       if (m.type === 'attributes' && m.target.nodeType === 1) {
         const el = m.target;
         const computed = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
+        if (rect.height <= 0) continue;
+
         if (
-          rect.height > 0 &&
-          (computed.position === 'fixed' || computed.position === 'absolute')
+          isOverlayElement(el) ||
+          computed.position === 'fixed' ||
+          computed.position === 'absolute'
         ) {
-          window.__flashDetected.push({
-            type: 'attr-change',
-            source: 'mutation',
-            time: performance.now(),
-            attr: m.attributeName,
-            tag: el.tagName,
-            position: computed.position,
-            style: el.getAttribute('style')?.substring(0, 200),
-            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-          });
+          record(
+            {
+              type: 'attr-change',
+              source: 'mutation',
+              time: performance.now(),
+              attr: m.attributeName,
+              tag: el.tagName,
+              position: computed.position,
+              opacity: computed.opacity,
+              transform: computed.transform?.substring(0, 100),
+              style: el.getAttribute('style')?.substring(0, 200),
+              rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+            },
+            el,
+          );
         }
       }
     }
@@ -88,8 +158,12 @@
     attributeFilter: [
       'style',
       'class',
+      'data-state',
+      'data-side',
       'data-dnd-dragging',
       'data-dnd-feedback',
+      'hidden',
+      'aria-hidden',
     ],
   });
 
@@ -98,13 +172,25 @@
     observer.disconnect();
   };
 
-  // Strategy 2: requestAnimationFrame loop to catch between-render states
-  // CUSTOMIZE: adjust the selector for the suspected element
+  // --- Strategy 2: requestAnimationFrame loop ---
+  const rafSelector =
+    CUSTOM_SELECTOR ||
+    [
+      '[data-dnd-overlay]',
+      '[data-radix-popper-content-wrapper]',
+      '[data-radix-portal]',
+      '[data-floating-ui-portal]',
+      '[data-framer-portal]',
+      '[role="dialog"][style]',
+      '[role="tooltip"][style]',
+    ].join(', ');
+
+  const prevPositioned = new WeakMap();
+
   function checkFrame() {
     if (!running) return;
-    const suspects = document.querySelectorAll(
-      '[data-dnd-overlay], [data-radix-popper-content-wrapper], [class*="overlay"], [class*="portal"]',
-    );
+
+    const suspects = document.querySelectorAll(rafSelector);
     for (const el of suspects) {
       const computed = window.getComputedStyle(el);
       const hasContent = el.children.length > 0;
@@ -115,24 +201,82 @@
         computed.visibility === 'hidden' ||
         computed.opacity === '0';
       const rect = el.getBoundingClientRect();
+      const wasPositioned = prevPositioned.get(el);
 
-      if (hasContent && !isPositioned && !isHidden && rect.height > 0) {
-        window.__flashDetected.push({
-          type: 'flash',
-          source: 'raf',
-          time: performance.now(),
-          tag: el.tagName,
-          position: computed.position,
-          display: computed.display,
-          rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-          text: el.textContent?.substring(0, 60),
-          childCount: el.children.length,
-        });
+      if (isPositioned) {
+        prevPositioned.set(el, computed.position);
+      }
+
+      if (isHidden || rect.height <= 0) continue;
+
+      // Detect positioning loss: was fixed/absolute, now static, still visible
+      if (wasPositioned && !isPositioned && hasContent) {
+        record(
+          {
+            type: 'position-lost',
+            source: 'raf',
+            time: performance.now(),
+            tag: el.tagName,
+            previousPosition: wasPositioned,
+            currentPosition: computed.position,
+            display: computed.display,
+            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+            text: el.textContent?.substring(0, 60),
+            childCount: el.children.length,
+          },
+          el,
+        );
+        prevPositioned.delete(el);
+      }
+
+      // Detect content without positioning (original "flash" pattern)
+      if (hasContent && !isPositioned) {
+        record(
+          {
+            type: 'flash',
+            source: 'raf',
+            time: performance.now(),
+            tag: el.tagName,
+            position: computed.position,
+            display: computed.display,
+            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+            text: el.textContent?.substring(0, 60),
+            childCount: el.children.length,
+          },
+          el,
+        );
+      }
+
+      // Detect transform loss on positioned element at suspicious position
+      if (
+        isPositioned &&
+        hasContent &&
+        computed.transform === 'none' &&
+        isSuspiciousPosition(rect)
+      ) {
+        record(
+          {
+            type: 'transform-lost',
+            source: 'raf',
+            time: performance.now(),
+            tag: el.tagName,
+            position: computed.position,
+            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+            text: el.textContent?.substring(0, 60),
+          },
+          el,
+        );
       }
     }
     requestAnimationFrame(checkFrame);
   }
   requestAnimationFrame(checkFrame);
 
-  return 'Flash detector installed';
+  return (
+    'Flash detector v2 installed. Config: ' +
+    JSON.stringify({
+      selector: rafSelector.substring(0, 80),
+      maxDetections: MAX_DETECTIONS,
+    })
+  );
 }
