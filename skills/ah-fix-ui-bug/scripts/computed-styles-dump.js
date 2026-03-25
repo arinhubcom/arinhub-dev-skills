@@ -33,6 +33,7 @@
     flexGrow: s.flexGrow, flexShrink: s.flexShrink, flexBasis: s.flexBasis,
     alignSelf: s.alignSelf, justifySelf: s.justifySelf,
     gridColumn: s.gridColumn, gridRow: s.gridRow,
+    boxSizing: s.boxSizing, pointerEvents: s.pointerEvents,
     rect: {x: r.x, y: r.y, w: r.width, h: r.height}
   };
 }

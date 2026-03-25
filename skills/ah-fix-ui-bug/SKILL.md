@@ -74,6 +74,8 @@ Match the primary symptom to decide which scripts to inject in Step 3:
 | Hover/focus state stuck after interaction  | Interaction state | `attribute-mutation-observer.js`                     |
 | Layout breaks at certain viewport widths   | Responsive        | `computed-styles-dump.js` + `resize_page`            |
 | Scroll jumps or content shifts on scroll   | Scroll            | `layout-shift-detection.js` + `scroll-tracking.js`   |
+| Sticky element stops sticking              | Sticky            | `computed-styles-dump.js` on element + ancestors      |
+| Click/hover passes through element         | Pointer events    | `computed-styles-dump.js`                             |
 
 If unsure, start with `computed-styles-dump.js` and `position-tracking.js` --
 they cover the broadest range of issues.
@@ -224,7 +226,59 @@ and ask the user to interact manually in the browser.
 
 ### 5. Diagnose
 
-Analyze collected data to identify the root cause.
+Analyze collected data to identify the root cause. Work through the data
+systematically -- don't jump to conclusions from a single signal.
+
+#### Reading Diagnostic Output
+
+**computed-styles-dump.js** -- Look for mismatches between what you expect
+and what's computed. Key signals:
+- `position: static` on an element that should be `fixed` or `absolute`
+- `overflow: hidden` when content is clipped unexpectedly
+- `display: none` or `visibility: hidden` when element should be visible
+- `rect` with `w: 0` or `h: 0` means the element has collapsed
+- `transform: none` when an animation should be active
+- `zIndex: auto` on a positioned element that needs layering
+
+**position-tracking.js** (`window.__posLog`) -- Look for:
+- Sudden jumps (large `from`/`to` deltas in a single entry) = layout shift
+- Gradual drift (many small changes) = animation or transition issue
+- Position snapping back to origin after interaction = containing block problem
+- Empty log = element isn't moving (bug may be in initial position, not movement)
+
+**layout-shift-detection.js** (`window.__shifts`) -- Look for:
+- `value > 0.1` = significant layout shift
+- `sources` array tells you which elements moved and their before/after rects
+- Shifts immediately after click = likely `display` toggle or content insertion
+
+**ancestor-css-check.js** -- Any results mean a containing block exists.
+The first entry in the array is the nearest ancestor creating the block --
+that's usually the one to fix.
+
+**stacking-context-inspector.js** -- Read bottom-to-top (document root first).
+The element's effective z-index is determined by its nearest stacking context
+ancestor, not its own z-index value. If two elements have different stacking
+context parents, compare those parents' z-index values.
+
+**flex-grid-inspector.js** -- Look for:
+- `flexShrink: "1"` + `minWidth: "auto"` = item won't shrink below content
+- `flexBasis: "auto"` when equal sizing expected = use `0`
+- Children `width` sum exceeding container width = overflow
+
+**attribute-mutation-observer.js** (`window.__mutations`) -- Look for:
+- Class additions that persist after interaction ends = stuck state
+- Style attribute changing rapidly = JS fighting CSS transitions
+- `position` changing from `fixed` to `static` = framework cleanup race
+
+#### When First Hypothesis is Wrong
+
+If the triage category from Step 2 doesn't match the data:
+1. Run `computed-styles-dump.js` on the element -- it covers the broadest range
+2. Run `ancestor-css-check.js` -- containing block issues masquerade as many
+   different symptoms
+3. Compare the element's `rect` position with its CSS `top`/`left` values --
+   a large discrepancy points to a containing block or transform offset
+4. Check PARENT elements, not just the target -- the bug is often one level up
 
 #### Common Root Causes
 
@@ -240,6 +294,10 @@ Analyze collected data to identify the root cause.
 | Text truncated without ellipsis                                            | Missing `overflow: hidden` + `text-overflow: ellipsis` + `white-space: nowrap`    | Run `computed-styles-dump.js` on text element                      |
 | Hover/focus state stuck after mouse leaves                                 | Event listener not cleaning up, or element repositioned under cursor              | Check mutations for lingering class/attribute                      |
 | Layout breaks at specific viewport width                                   | Media query breakpoint mismatch or fixed-width ancestor                           | Use `resize_page` at various widths, run `computed-styles-dump.js` |
+| Sticky element stops sticking                                              | Ancestor has `overflow: hidden/auto/scroll` breaking sticky containment           | Run `ancestor-css-check.js`, check `overflow` on each ancestor     |
+| Click/hover passes through element to one behind                           | `pointer-events: none` on element or ancestor                                     | Run `computed-styles-dump.js`, check `pointerEvents` value         |
+| Element correct size but content overflows visually                        | `box-sizing: content-box` (not `border-box`) with padding/border                  | Check `computed-styles-dump.js` for `boxSizing`                    |
+| Child elements unclickable inside positioned parent                        | Parent has `pointer-events: none` cascading to children                            | Add `pointer-events: auto` on the clickable child                  |
 
 #### Containing Block Issues (position:fixed)
 
@@ -272,6 +330,21 @@ Common accidental stacking context creators:
 Fix: Restructure the DOM so both elements share a stacking context,
 or use a Portal to escape the nested context.
 
+#### Sticky Positioning Failures
+
+`position: sticky` silently fails when any ancestor between the sticky
+element and its scroll container has `overflow: hidden`, `overflow: auto`,
+or `overflow: scroll`. The sticky element becomes effectively `relative`.
+
+The `ancestor-css-check.js` script doesn't check overflow by default.
+To diagnose, run `computed-styles-dump.js` on each ancestor between the
+sticky element and the scrolling container, checking for `overflow` values
+other than `visible`.
+
+Fix: Remove the `overflow` property from the offending ancestor, or
+restructure the DOM so no clipping ancestor sits between the sticky
+element and its scroll container.
+
 #### Flex/Grid Sizing Issues
 
 Common flex pitfalls:
@@ -284,24 +357,55 @@ Common flex pitfalls:
 
 ### 6. Find Source Code
 
-Bridge from browser diagnosis to the codebase. Use class names, data attributes,
-and element structure from the snapshot to locate source files:
+Bridge from browser diagnosis to the codebase. The goal is to find which
+source file renders the bugged element so you can apply the fix.
+
+**Strategy 1: Data attributes and unique identifiers** (most reliable)
+
+Look for `data-testid`, `data-*`, `id`, or `role` attributes in the snapshot.
+These are unique and map directly to source code:
 
 ```bash
-# From Tailwind classes or CSS property names
-grep -r "overflow-hidden" src/ --include="*.tsx" --include="*.jsx" -l
-grep -r "will-change" src/ --include="*.css" --include="*.tsx" -l
-
-# From data attributes
 grep -r "data-overlay" src/ --include="*.tsx" --include="*.jsx" -l
+grep -r 'testId.*"save-btn"' src/ --include="*.tsx" --include="*.jsx" -l
+```
 
-# From visible text content in the snapshot
+**Strategy 2: Text content or aria labels**
+
+Visible text from the snapshot maps to JSX or i18n keys:
+
+```bash
 grep -r "Save Changes" src/ --include="*.tsx" --include="*.jsx" -l
 ```
 
-Use the tag hierarchy from `take_snapshot` (e.g., `div > section > button`) to
-narrow down which component renders the target element. After locating the file,
-apply the fix pattern identified in Step 5.
+**Strategy 3: CSS class names**
+
+For Tailwind, search the exact utility combination. For CSS modules or
+styled-components, search the class root:
+
+```bash
+grep -r "overflow-hidden" src/ --include="*.tsx" --include="*.jsx" -l
+grep -r "will-change" src/ --include="*.css" --include="*.tsx" -l
+```
+
+**Strategy 4: Component name from React DevTools**
+
+If the snapshot shows a recognizable component structure, search for the
+component name directly. Storybook story IDs often contain the component
+path (e.g., `components-modal--default` maps to `components/Modal`).
+
+**Strategy 5: CSS property causing the bug**
+
+When the root cause is a specific CSS property (e.g., `will-change: transform`
+on an ancestor), search for that property. The fix often isn't on the bugged
+element itself but on a parent component:
+
+```bash
+grep -r "will-change" src/ --include="*.css" --include="*.tsx" -l
+grep -r "overflow-hidden" src/ --include="*.tsx" -l
+```
+
+After locating the file, apply the fix pattern identified in Step 5.
 
 ### 7. Verify the Fix
 
