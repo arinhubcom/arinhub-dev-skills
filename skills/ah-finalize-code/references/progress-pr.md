@@ -6,89 +6,111 @@
 - **Spec Dir**: specs/<BRANCH_NAME>/
 - **Started at**: <TIMESTAMP>
 - **Completed at**: pending
+- **Total duration**: pending
 
 ## 1. Simplifier
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
 ## 2. Retrospective
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
 ## 3. Test Creator
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
-## 4. JSDoc Updater
+## 4a. JSDoc Updater
 
 - status: not started
+- started:
+- ended:
+- duration:
+- commit: (shared with 4b)
+- artifacts:
+- findings:
+
+## 4b. Tests Docs Updater
+
+- status: not started
+- started:
+- ended:
+- duration:
+- commit: (shared with 4a)
+- artifacts:
+- findings:
+
+## 5. API Docs Updater
+
+- status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
-## 5. Tests Docs Updater
+## 6. Spec Optimizer
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
-## 6. API Docs Updater
+## 7. Spec Updater
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
-## 7. Spec Optimizer
+## 8. Code Reviewer
 
 - status: not started
+- started:
+- ended:
+- duration:
 - commit:
 - artifacts:
-- duration:
 - findings:
 
-## 8. Spec Updater
+## 9. PR Creator
 
 - status: not started
-- commit:
-- artifacts:
+- started:
+- ended:
 - duration:
-- findings:
-
-## 9. Code Reviewer
-
-- status: not started
-- commit:
 - artifacts:
-- duration:
-- findings:
-
-## 10. PR Creator
-
-- status: not started
-- artifacts:
-- duration:
 - findings:
 
 ## Summary
 
-- total steps: 0/10
+- total steps: 0/9
 - status: not started
+- total duration: pending
 - warnings:
 - unresolved issues:
