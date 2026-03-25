@@ -55,7 +55,7 @@ Read the template from `references/progress-pr.md`, replace all `<BRANCH_NAME>`,
 Spawn subagent **simplifier** (Opus, ultrathink):
 
 - Get fresh diff: `git diff "${MERGE_BASE}"`
-- Run `/simplify` with prompt: `Simplify changes in current diff only, then check "pnpm preflight"`
+- Run `/simplify` with prompt: `Simplify changes in current diff only, then check "npm run preflight"`
 - Update `${PROGRESS_FILE}` Simplifier section (status: completed, findings)
 
 Then spawn subagent **committer** (Sonnet) -- run `/commit`.
@@ -103,7 +103,7 @@ Then spawn subagent **committer** (Sonnet) -- run `/commit`.
 
 Spawn subagent **api-docs-updater** (Opus, ultrathink):
 
-- Prompt: `Run "pnpm docs:generate", then extract type definitions, interfaces, and function signatures from "docs/typedoc" output to create/update "docs/api/index.md" (overview + TOC) and topic files ("docs/api/api-components.md", "api-hooks.md", etc.) with one file per logical section, validate all index links resolve to existing files, and report progress -- do not generate code examples, tutorials, or document private APIs.`
+- Prompt: `Run "npm run docs:generate", then extract type definitions, interfaces, and function signatures from "docs/typedoc" output to create/update "docs/api/index.md" (overview + TOC) and topic files ("docs/api/api-components.md", "api-hooks.md", etc.) with one file per logical section, validate all index links resolve to existing files, and report progress -- do not generate code examples, tutorials, or document private APIs.`
 - Update `${PROGRESS_FILE}` API Docs Updater section
 
 Then spawn subagent **committer** (Sonnet) -- run `/commit`.
@@ -132,7 +132,7 @@ Then spawn subagent **committer** (Sonnet) -- run `/commit`.
 
 Spawn subagent **code-reviewer** (Opus, ultrathink):
 
-- Run `/ah-review-code` with prompt: `base branch is ${BASE_BRANCH}, after code review read the code review file and fix all issues you find, then check "pnpm preflight"`
+- Run `/ah-review-code` with prompt: `base branch is ${BASE_BRANCH}, after code review read the code review file and fix all issues you find, then check "npm run preflight"`
 - Update `${PROGRESS_FILE}` Code Reviewer section
 
 Then spawn subagent **committer** (Sonnet) -- run `/commit`.
