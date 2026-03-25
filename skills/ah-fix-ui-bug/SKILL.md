@@ -62,18 +62,18 @@ own UI interfering with snapshots.
 Before instrumenting, classify the bug to choose the right diagnostics.
 Match the primary symptom to decide which scripts to inject in Step 3:
 
-| Symptom | Category | Scripts to Inject |
-|---------|----------|-------------------|
-| Element offset from expected position | Containing block | `ancestor-css-check.js` + `position-tracking.js` |
-| Element shifts after click / state change | Layout shift | `layout-shift-detection.js` + `position-tracking.js` |
-| Animation or transition ends at wrong spot | Animation | `animation-logging.js` + `position-tracking.js` |
-| Elements overlap or wrong layer order | Z-index | `stacking-context-inspector.js` |
-| Flex/grid items misaligned or wrong size | Flex/Grid | `flex-grid-inspector.js` |
-| Text clipped, overflowing, or truncated | Overflow | `computed-styles-dump.js` |
-| Element invisible when it should show | Visibility | `computed-styles-dump.js` |
-| Hover/focus state stuck after interaction | Interaction state | `attribute-mutation-observer.js` |
-| Layout breaks at certain viewport widths | Responsive | `computed-styles-dump.js` + `resize_page` |
-| Scroll jumps or content shifts on scroll | Scroll | `layout-shift-detection.js` + `scroll-tracking.js` |
+| Symptom                                    | Category          | Scripts to Inject                                    |
+| ------------------------------------------ | ----------------- | ---------------------------------------------------- |
+| Element offset from expected position      | Containing block  | `ancestor-css-check.js` + `position-tracking.js`     |
+| Element shifts after click / state change  | Layout shift      | `layout-shift-detection.js` + `position-tracking.js` |
+| Animation or transition ends at wrong spot | Animation         | `animation-logging.js` + `position-tracking.js`      |
+| Elements overlap or wrong layer order      | Z-index           | `stacking-context-inspector.js`                      |
+| Flex/grid items misaligned or wrong size   | Flex/Grid         | `flex-grid-inspector.js`                             |
+| Text clipped, overflowing, or truncated    | Overflow          | `computed-styles-dump.js`                            |
+| Element invisible when it should show      | Visibility        | `computed-styles-dump.js`                            |
+| Hover/focus state stuck after interaction  | Interaction state | `attribute-mutation-observer.js`                     |
+| Layout breaks at certain viewport widths   | Responsive        | `computed-styles-dump.js` + `resize_page`            |
+| Scroll jumps or content shifts on scroll   | Scroll            | `layout-shift-detection.js` + `scroll-tracking.js`   |
 
 If unsure, start with `computed-styles-dump.js` and `position-tracking.js` --
 they cover the broadest range of issues.
@@ -86,20 +86,20 @@ for the bugged element), then inject via `chrome-devtools evaluate_script`.
 
 Available scripts in `scripts/`:
 
-| Script | Purpose | Selector to Customize |
-|--------|---------|----------------------|
-| `computed-styles-dump.js` | Dumps key computed CSS properties and bounding rect | `.target-element` |
-| `layout-shift-detection.js` | Installs PerformanceObserver for CLS detection | None (observes all shifts) |
-| `position-tracking.js` | Tracks element positions every animation frame | `.target-element` |
-| `ancestor-css-check.js` | Finds ancestors creating containing blocks | `.target-element` |
-| `stacking-context-inspector.js` | Maps stacking contexts in ancestor chain | `.target-element` |
-| `flex-grid-inspector.js` | Inspects flex/grid container and children sizing | `.flex-container` |
-| `attribute-mutation-observer.js` | Watches attribute/class/style changes | `.target-element` |
-| `animation-logging.js` | Patches `Element.animate` to log parameters | None (patches globally) |
-| `persistent-overlay.js` | On-screen real-time diagnostic monitor | `.target-element` |
-| `visual-position-marker.js` | Drops a red dot at coordinates (pass `--args x y`) | None (uses args) |
-| `scroll-tracking.js` | Monitors scroll position changes | `.scroll-container` |
-| `viewport-responsive-check.js` | Inspects container and children at current viewport | `.responsive-container` |
+| Script                           | Purpose                                             | Selector to Customize      |
+| -------------------------------- | --------------------------------------------------- | -------------------------- |
+| `computed-styles-dump.js`        | Dumps key computed CSS properties and bounding rect | `.target-element`          |
+| `layout-shift-detection.js`      | Installs PerformanceObserver for CLS detection      | None (observes all shifts) |
+| `position-tracking.js`           | Tracks element positions every animation frame      | `.target-element`          |
+| `ancestor-css-check.js`          | Finds ancestors creating containing blocks          | `.target-element`          |
+| `stacking-context-inspector.js`  | Maps stacking contexts in ancestor chain            | `.target-element`          |
+| `flex-grid-inspector.js`         | Inspects flex/grid container and children sizing    | `.flex-container`          |
+| `attribute-mutation-observer.js` | Watches attribute/class/style changes               | `.target-element`          |
+| `animation-logging.js`           | Patches `Element.animate` to log parameters         | None (patches globally)    |
+| `persistent-overlay.js`          | On-screen real-time diagnostic monitor              | `.target-element`          |
+| `visual-position-marker.js`      | Drops a red dot at coordinates (pass `--args x y`)  | None (uses args)           |
+| `scroll-tracking.js`             | Monitors scroll position changes                    | `.scroll-container`        |
+| `viewport-responsive-check.js`   | Inspects container and children at current viewport | `.responsive-container`    |
 
 Example workflow:
 
@@ -112,6 +112,82 @@ chrome-devtools evaluate_script "() => {
   ...rest of script content...
 }"
 ```
+
+#### Script Usage Notes
+
+**animation-logging.js** -- Patches the global `HTMLElement.prototype.animate`,
+no selector needed. Assumes the object-of-arrays keyframe format
+(`{transform: ['...', '...']}`). Adjust the script if the code uses the
+array-of-objects format. Read logged animations via:
+
+```bash
+chrome-devtools list_console_messages --pageSize 20 --types log
+```
+
+**persistent-overlay.js** -- Use when automated clicks don't reproduce the bug
+(some libraries like dnd-kit's PointerSensor check `event.isPrimary` on synthetic
+events). Inject it, then ask the user to interact manually in the browser. After
+the user interacts, read collected data and take a screenshot.
+
+**visual-position-marker.js** -- Pass coordinates as args. The dot auto-removes
+after 3 seconds:
+
+```bash
+chrome-devtools evaluate_script "<script content>" --args 200 150
+```
+
+**scroll-tracking.js** -- Read results after interaction:
+
+```bash
+chrome-devtools evaluate_script "() => JSON.stringify(window.__scrollLog)"
+```
+
+#### Performance Traces
+
+Use Chrome's built-in performance profiling when other scripts don't capture
+the issue (happens at compositor/paint level):
+
+```bash
+# Start recording before the interaction
+chrome-devtools performance_start_trace --filePath /tmp/trace.json
+
+# Reproduce the bug (click, drag, scroll, etc.)
+chrome-devtools click "<uid>" --includeSnapshot true
+
+# Stop recording
+chrome-devtools performance_stop_trace --filePath /tmp/trace.json
+```
+
+The trace file can be loaded in Chrome DevTools (Performance tab) or
+`chrome://tracing`. Look for:
+
+- Long frames (>16ms) causing visual jank
+- Layout thrashing (forced reflows between read/write cycles)
+- Paint regions that shouldn't be repainting
+- Compositor layer promotion/demotion
+
+#### Viewport / Responsive Testing
+
+Test layout at different viewport widths when the bug only appears at certain
+screen sizes:
+
+```bash
+chrome-devtools resize_page 375 812     # Mobile (iPhone)
+chrome-devtools take_screenshot --filePath /tmp/mobile.png
+
+chrome-devtools resize_page 768 1024    # Tablet
+chrome-devtools take_screenshot --filePath /tmp/tablet.png
+
+chrome-devtools resize_page 1280 800    # Desktop
+chrome-devtools take_screenshot --filePath /tmp/desktop.png
+
+chrome-devtools resize_page 1920 1080   # Large desktop
+chrome-devtools take_screenshot --filePath /tmp/large-desktop.png
+```
+
+Between resizes, run `scripts/computed-styles-dump.js` on the problematic element
+to see which CSS properties change at each breakpoint. For container queries,
+use `scripts/viewport-responsive-check.js` after customizing the selector.
 
 ### 4. Interact and Capture
 
@@ -152,18 +228,18 @@ Analyze collected data to identify the root cause.
 
 #### Common Root Causes
 
-| Symptom | Likely Cause | How to Confirm |
-|---------|-------------|----------------|
-| `style.left` differs from `getBoundingClientRect().left` by large constant | Ancestor has `will-change:transform` or `transform` creating new containing block | Run `ancestor-css-check.js` |
-| Element shifts position after state change | CSS `transition` + box model change (border/padding) | Check mutations for class changes |
-| Animation lands at wrong position | `getBoundingClientRect()` called during layout transition | Compare rects at capture time vs stable state |
-| Element disappears during interaction | `overflow:hidden` on ancestor clipping during transform | Temporarily remove `overflow:hidden` and test |
-| Layout shift on click | `display` change or element insertion affecting flex/grid flow | Check layout-shift entries |
-| Element behind another despite higher z-index | Different stacking contexts -- z-index only competes within the same context | Run `stacking-context-inspector.js` on both elements |
-| Flex item unexpectedly shrinking or overflowing | `flex-shrink: 1` (default) + `min-width: auto` allowing collapse | Check `flex-grid-inspector.js` for shrink/min-width |
-| Text truncated without ellipsis | Missing `overflow: hidden` + `text-overflow: ellipsis` + `white-space: nowrap` | Run `computed-styles-dump.js` on text element |
-| Hover/focus state stuck after mouse leaves | Event listener not cleaning up, or element repositioned under cursor | Check mutations for lingering class/attribute |
-| Layout breaks at specific viewport width | Media query breakpoint mismatch or fixed-width ancestor | Use `resize_page` at various widths, run `computed-styles-dump.js` |
+| Symptom                                                                    | Likely Cause                                                                      | How to Confirm                                                     |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `style.left` differs from `getBoundingClientRect().left` by large constant | Ancestor has `will-change:transform` or `transform` creating new containing block | Run `ancestor-css-check.js`                                        |
+| Element shifts position after state change                                 | CSS `transition` + box model change (border/padding)                              | Check mutations for class changes                                  |
+| Animation lands at wrong position                                          | `getBoundingClientRect()` called during layout transition                         | Compare rects at capture time vs stable state                      |
+| Element disappears during interaction                                      | `overflow:hidden` on ancestor clipping during transform                           | Temporarily remove `overflow:hidden` and test                      |
+| Layout shift on click                                                      | `display` change or element insertion affecting flex/grid flow                    | Check layout-shift entries                                         |
+| Element behind another despite higher z-index                              | Different stacking contexts -- z-index only competes within the same context      | Run `stacking-context-inspector.js` on both elements               |
+| Flex item unexpectedly shrinking or overflowing                            | `flex-shrink: 1` (default) + `min-width: auto` allowing collapse                  | Check `flex-grid-inspector.js` for shrink/min-width                |
+| Text truncated without ellipsis                                            | Missing `overflow: hidden` + `text-overflow: ellipsis` + `white-space: nowrap`    | Run `computed-styles-dump.js` on text element                      |
+| Hover/focus state stuck after mouse leaves                                 | Event listener not cleaning up, or element repositioned under cursor              | Check mutations for lingering class/attribute                      |
+| Layout breaks at specific viewport width                                   | Media query breakpoint mismatch or fixed-width ancestor                           | Use `resize_page` at various widths, run `computed-styles-dump.js` |
 
 #### Containing Block Issues (position:fixed)
 
@@ -186,6 +262,7 @@ inside a stacking context with `z-index: 1` still appears below a sibling
 context with `z-index: 2`.
 
 Common accidental stacking context creators:
+
 - `opacity` less than 1
 - `transform` other than none
 - `filter`, `backdrop-filter`
@@ -198,6 +275,7 @@ or use a Portal to escape the nested context.
 #### Flex/Grid Sizing Issues
 
 Common flex pitfalls:
+
 - `min-width: auto` (default) prevents flex items from shrinking below content
   size. Fix: set `min-width: 0` on the flex item.
 - `flex-basis: auto` uses content size. Fix: `flex-basis: 0` for equal distribution.
@@ -265,21 +343,20 @@ Present findings and resolution:
 - CSS-level fixes (Portals, containing block escapes) are preferred over JavaScript workarounds for positioning bugs.
 - For single-frame flash/flicker timing races (element appears for one frame then disappears), use the `ah-fix-dom-flash` skill instead -- it has specialized detectors for that pattern.
 - When testing responsive bugs, use `chrome-devtools resize_page <width> <height>` to test multiple viewport sizes without manually resizing the browser.
-- For additional recipes (performance traces, viewport testing), see `references/advanced-recipes.md`.
 
 ## Quick Reference
 
-| Command | Purpose | Key Flags |
-|---------|---------|-----------|
-| `navigate_page --url <url>` | Go to a URL | `--timeout` |
-| `take_snapshot` | A11y tree with UIDs | `--verbose true` |
-| `take_screenshot` | Visual capture | `--filePath`, `--fullPage true`, `--uid` |
-| `click "<uid>"` | Click element | `--includeSnapshot true`, `--dblClick true` |
-| `hover "<uid>"` | Hover element | `--includeSnapshot true` |
-| `drag "<src>" "<dst>"` | Drag element | `--includeSnapshot true` |
-| `evaluate_script "<fn>"` | Run JS in page | `--args` |
-| `list_console_messages` | List console logs | `--pageSize`, `--types` |
-| `get_console_message <id>` | Read one log entry | |
-| `resize_page <w> <h>` | Change viewport | |
-| `performance_start_trace` | Start perf trace | `--filePath` |
-| `performance_stop_trace` | Stop perf trace | `--filePath` |
+| Command                     | Purpose             | Key Flags                                   |
+| --------------------------- | ------------------- | ------------------------------------------- |
+| `navigate_page --url <url>` | Go to a URL         | `--timeout`                                 |
+| `take_snapshot`             | A11y tree with UIDs | `--verbose true`                            |
+| `take_screenshot`           | Visual capture      | `--filePath`, `--fullPage true`, `--uid`    |
+| `click "<uid>"`             | Click element       | `--includeSnapshot true`, `--dblClick true` |
+| `hover "<uid>"`             | Hover element       | `--includeSnapshot true`                    |
+| `drag "<src>" "<dst>"`      | Drag element        | `--includeSnapshot true`                    |
+| `evaluate_script "<fn>"`    | Run JS in page      | `--args`                                    |
+| `list_console_messages`     | List console logs   | `--pageSize`, `--types`                     |
+| `get_console_message <id>`  | Read one log entry  |                                             |
+| `resize_page <w> <h>`       | Change viewport     |                                             |
+| `performance_start_trace`   | Start perf trace    | `--filePath`                                |
+| `performance_stop_trace`    | Stop perf trace     | `--filePath`                                |
