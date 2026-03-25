@@ -1,10 +1,17 @@
 ---
 name: ah-fix-dom-flash
-description: "Use this skill to detect and debug DOM flash/flicker bugs using Chrome DevTools MCP when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), or timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements."
+description: "Use this skill to detect and debug DOM flash/flicker bugs using chrome-devtools CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), or timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements."
 argument-hint: "URL or page description, suspected element selector or interaction type"
 ---
 
 # Fix DOM Flash/Flicker Bugs
+
+This skill uses the `chrome-devtools-cli` skill for all browser interactions.
+Invoke `/chrome-devtools-cli` if you need help with command syntax or flags.
+
+Diagnostic scripts are in the `scripts/` directory. To use them: read the
+script file, customize the selector for the specific bug, then pass the
+content to `chrome-devtools evaluate_script`.
 
 Detects elements that briefly appear in wrong positions due to timing races between
 framework-level DOM manipulation (e.g., @dnd-kit, Framer Motion, GSAP) and React's
@@ -26,163 +33,94 @@ async re-render cycle.
 
 ## Procedure
 
-### 1. Identify the Target Page
+### 1. Verify Chrome DevTools Connection
 
-Navigate to the page or Storybook story where the bug reproduces.
+Ensure Chrome is running with DevTools protocol enabled.
 
+```bash
+chrome-devtools list_pages
 ```
-Use: mcp__chrome-devtools__list_pages -> mcp__chrome-devtools__select_page -> mcp__chrome-devtools__navigate_page
+
+If no pages are available, start the daemon:
+
+```bash
+chrome-devtools start
 ```
 
-If no pages are available or the browser is not connected, stop and ask the user to ensure Chrome is running with DevTools protocol enabled.
+### 2. Navigate and Take Baseline
 
-### 2. Take Baseline Screenshot and Snapshot
+Navigate to the page or Storybook story where the bug reproduces, then
+capture the initial state.
 
-Before any interaction, capture the initial state.
+```bash
+# Navigate to the page with the bug
+chrome-devtools navigate_page --url "http://localhost:6006/iframe.html?id=..."
 
+# Primary inspection tool -- returns structured a11y tree with element UIDs
+chrome-devtools take_snapshot --verbose true
+
+# Visual screenshot for baseline reference
+chrome-devtools take_screenshot --filePath /tmp/before.png
 ```
-Use: mcp__chrome-devtools__take_snapshot (verbose=true) to get element UIDs
-Use: mcp__chrome-devtools__take_screenshot to see visual state
-```
+
+The a11y snapshot returns elements like `uid=6_2 button "Apple"`. These UIDs
+are used in subsequent click/hover/drag commands. Always prefer `take_snapshot`
+over `take_screenshot` for debugging -- it provides structured, queryable data.
 
 ### 3. Install Flash Detector
 
-Before reproducing the bug, inject a detector that catches elements appearing
+Before reproducing the bug, inject the detector that catches elements appearing
 in wrong positions between frames. This is the critical step.
 
-```javascript
-// Inject via mcp__chrome-devtools__evaluate_script BEFORE reproducing the interaction
-() => {
-  window.__flashDetected = [];
-  let running = true;
+Read `scripts/flash-detector.js`, customize the `suspects` selector in the rAF
+section if the user provided a suspected element, then inject:
 
-  // Strategy 1: MutationObserver for attribute/style changes
-  const observer = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      // Check added nodes
-      for (const node of m.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        const el = node;
-        const rect = el.getBoundingClientRect();
-        const computed = window.getComputedStyle(el);
-        if (rect.height > 0 && computed.display !== "none") {
-          window.__flashDetected.push({
-            type: "added",
-            source: "mutation",
-            time: performance.now(),
-            tag: el.tagName,
-            className: (el.className || "").substring(0, 150),
-            position: computed.position,
-            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-            text: el.textContent?.substring(0, 60),
-          });
-        }
-      }
-      // Check style/attribute changes on fixed/absolute elements
-      if (m.type === "attributes" && m.target.nodeType === 1) {
-        const el = m.target;
-        const computed = window.getComputedStyle(el);
-        const rect = el.getBoundingClientRect();
-        if (
-          rect.height > 0 &&
-          (computed.position === "fixed" || computed.position === "absolute")
-        ) {
-          window.__flashDetected.push({
-            type: "attr-change",
-            source: "mutation",
-            time: performance.now(),
-            attr: m.attributeName,
-            tag: el.tagName,
-            position: computed.position,
-            style: el.getAttribute("style")?.substring(0, 200),
-            rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-          });
-        }
-      }
-    }
-  });
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: [
-      "style",
-      "class",
-      "data-dnd-dragging",
-      "data-dnd-feedback",
-    ],
-  });
-
-  window.__stopFlashDetector = () => {
-    running = false;
-    observer.disconnect();
-  };
-
-  // Strategy 2: requestAnimationFrame loop to catch between-render states
-  // CUSTOMIZE: adjust the selector and condition for the suspected element
-  function checkFrame() {
-    if (!running) return;
-    // Look for overlay/portal elements that lost positioning but still have content
-    const suspects = document.querySelectorAll(
-      '[data-dnd-overlay], [data-radix-popper-content-wrapper], [class*="overlay"], [class*="portal"]',
-    );
-    for (const el of suspects) {
-      const computed = window.getComputedStyle(el);
-      const hasContent = el.children.length > 0;
-      const isPositioned =
-        computed.position === "fixed" || computed.position === "absolute";
-      const isHidden =
-        computed.display === "none" ||
-        computed.visibility === "hidden" ||
-        computed.opacity === "0";
-      const rect = el.getBoundingClientRect();
-
-      if (hasContent && !isPositioned && !isHidden && rect.height > 0) {
-        window.__flashDetected.push({
-          type: "flash",
-          source: "raf",
-          time: performance.now(),
-          tag: el.tagName,
-          position: computed.position,
-          display: computed.display,
-          rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-          text: el.textContent?.substring(0, 60),
-          childCount: el.children.length,
-        });
-      }
-    }
-    requestAnimationFrame(checkFrame);
-  }
-  requestAnimationFrame(checkFrame);
-
-  return "Flash detector installed";
-};
+```bash
+chrome-devtools evaluate_script "<customized flash-detector.js content>"
 ```
 
-IMPORTANT: If the user provided a suspected element selector, customize the `suspects` selector in the rAF loop to target that element specifically.
+Available scripts in `scripts/`:
+
+| Script                       | Purpose                                       | Selector to Customize       |
+| ---------------------------- | --------------------------------------------- | --------------------------- |
+| `flash-detector.js`          | Dual-strategy detector (MutationObserver+rAF) | `suspects` selector in rAF  |
+| `collect-flash-results.js`   | Collects results and stops the detector        | None                        |
+| `lingering-fixed-elements.js`| Scans for leftover fixed-position elements     | None                        |
+
+IMPORTANT: If the user provided a suspected element selector, customize the
+`suspects` selector in the rAF loop of `flash-detector.js` to target that
+element specifically.
 
 ### 4. Reproduce the Interaction
 
-Use the appropriate Chrome DevTools MCP tool to trigger the bug:
+Trigger the bug using the appropriate command:
 
-- **Drag-and-drop**: `mcp__chrome-devtools__drag(from_uid, to_uid)`
-- **Click**: `mcp__chrome-devtools__click(uid)`
-- **Hover**: `mcp__chrome-devtools__hover(uid)`
-- **Keyboard**: `mcp__chrome-devtools__press_key(key)`
+```bash
+# Drag-and-drop
+chrome-devtools drag "<src_uid>" "<dst_uid>" --includeSnapshot true
+
+# Click
+chrome-devtools click "<uid>" --includeSnapshot true
+
+# Hover
+chrome-devtools hover "<uid>" --includeSnapshot true
+
+# Keyboard
+chrome-devtools press_key "<key>"
+```
 
 ### 5. Collect Results
 
-```javascript
-// Inject via mcp__chrome-devtools__evaluate_script AFTER the interaction
-() => {
-  const results = window.__flashDetected || [];
-  window.__stopFlashDetector?.();
-  return {
-    count: results.length,
-    detections: results.slice(0, 20),
-  };
-};
+After the interaction, read `scripts/collect-flash-results.js` and inject it:
+
+```bash
+chrome-devtools evaluate_script "<collect-flash-results.js content>"
+```
+
+Expected output:
+
+```json
+{ "count": 3, "detections": [ ... ] }
 ```
 
 ### 6. Analyze Findings
@@ -197,32 +135,23 @@ Key indicators in the results:
 | `text` contains component content     | Confirms it is the ghost element, not a structural div                       |
 | Multiple detections at same `time`    | Single frame where the bug manifests                                         |
 
-If zero detections are found, try reproducing the interaction again or adjust the detector selector in Step 3. The flash may be too fast for the rAF loop -- consider using a Performance trace via `mcp__chrome-devtools__performance_start_trace` and `mcp__chrome-devtools__performance_stop_trace` instead.
+If zero detections are found, try reproducing the interaction again or adjust
+the detector selector in Step 3. The flash may be too fast for the rAF loop --
+consider using a Performance trace instead:
+
+```bash
+chrome-devtools performance_start_trace --filePath /tmp/trace.json
+# Reproduce the interaction
+chrome-devtools performance_stop_trace --filePath /tmp/trace.json
+```
 
 ### 7. Inspect Current DOM State
 
-After the interaction, check for lingering elements:
+After the interaction, check for lingering elements by reading
+`scripts/lingering-fixed-elements.js` and injecting it:
 
-```javascript
-// Inject via mcp__chrome-devtools__evaluate_script
-() => {
-  const all = document.querySelectorAll("*");
-  const suspects = [];
-  for (const el of all) {
-    const computed = window.getComputedStyle(el);
-    if (computed.position === "fixed" && el.offsetWidth > 2) {
-      suspects.push({
-        tag: el.tagName,
-        className: (el.className || "").substring(0, 100),
-        style: (el.getAttribute("style") || "").substring(0, 200),
-        rect: el.getBoundingClientRect(),
-        text: el.textContent?.substring(0, 60),
-        visible: computed.visibility !== "hidden" && computed.opacity !== "0",
-      });
-    }
-  }
-  return suspects;
-};
+```bash
+chrome-devtools evaluate_script "<lingering-fixed-elements.js content>"
 ```
 
 ### 8. Identify Root Cause
@@ -275,12 +204,22 @@ briefly appears in document flow.
 
 After applying a fix, re-run Steps 3-5 to confirm zero flash detections:
 
-```javascript
-// Expected result after fix:
-{ count: 0, detections: [] }
-```
+```bash
+# Reload the page
+chrome-devtools navigate_page --url "..."
 
-Also take a screenshot via `mcp__chrome-devtools__take_screenshot` after the interaction to visually confirm no artifacts.
+# Take snapshot to get fresh UIDs
+chrome-devtools take_snapshot --verbose true
+
+# Re-inject flash detector, reproduce, collect results
+chrome-devtools evaluate_script "<flash-detector.js content>"
+# ... reproduce interaction ...
+chrome-devtools evaluate_script "<collect-flash-results.js content>"
+# Expected: { "count": 0, "detections": [] }
+
+# Visual confirmation
+chrome-devtools take_screenshot --filePath /tmp/after-fix.png
+```
 
 ### 10. Report to User
 
@@ -294,15 +233,33 @@ Present findings and resolution:
 
 ## Error Handling
 
-- If Chrome DevTools connection fails, stop and ask the user to ensure Chrome is running with `--remote-debugging-port` enabled
+- If Chrome DevTools connection fails, run `chrome-devtools start` to start the daemon
 - If the flash detector script fails to inject (e.g., CSP restrictions), inform the user and suggest disabling CSP in the dev environment
 - If zero detections after multiple reproduction attempts, suggest using Performance traces or manual frame-stepping instead
-- If the interaction tool fails (e.g., element UID not found), re-take a snapshot to get updated UIDs
+- If the interaction tool fails (e.g., element UID not found), re-take a snapshot with `chrome-devtools take_snapshot`
 
 ## Important Notes
 
+- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots are only needed for visual confirmation.
 - The flash detector uses both MutationObserver and requestAnimationFrame strategies. MutationObserver catches DOM changes synchronously, while rAF catches visual states between render frames.
 - The rAF loop `suspects` selector must be customized for the specific element causing the flash. The default selector targets common overlay/portal patterns.
 - Flash bugs are timing-dependent -- they may not reproduce consistently. Run the detection cycle 2-3 times before concluding there is no issue.
 - CSS-level fixes (hiding elements when attributes are absent) are preferred over JavaScript fixes because they prevent the flash at the render level rather than cleaning up after it.
 - The detector captures up to 20 detections to avoid memory issues. If the bug produces many events (e.g., continuous animation), increase the slice limit or filter by `type`.
+- All JavaScript snippets use `chrome-devtools evaluate_script`. The function must be an arrow function returning a JSON-serializable value.
+- Selectors in script files are placeholders -- customize them for the specific bug before injecting.
+
+## Quick Reference
+
+| Command                     | Purpose             | Key Flags                                   |
+| --------------------------- | ------------------- | ------------------------------------------- |
+| `navigate_page --url <url>` | Go to a URL         | `--timeout`                                 |
+| `take_snapshot`             | A11y tree with UIDs | `--verbose true`                            |
+| `take_screenshot`           | Visual capture      | `--filePath`, `--fullPage true`, `--uid`    |
+| `click "<uid>"`             | Click element       | `--includeSnapshot true`, `--dblClick true` |
+| `hover "<uid>"`             | Hover element       | `--includeSnapshot true`                    |
+| `drag "<src>" "<dst>"`      | Drag element        | `--includeSnapshot true`                    |
+| `evaluate_script "<fn>"`    | Run JS in page      | `--args`                                    |
+| `press_key "<key>"`         | Press keyboard key  |                                              |
+| `performance_start_trace`   | Start perf trace    | `--filePath`                                |
+| `performance_stop_trace`    | Stop perf trace     | `--filePath`                                |
