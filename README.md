@@ -67,7 +67,7 @@ Install all required commands and skills:
 
 ```sh
 claude plugin install pr-review-toolkit
-npx skills add arinhubcom/arinhub -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
 npx skills add google-gemini/gemini-cli -y -g -s code-reviewer
 npx skills add bgauryy/octocode-mcp -y -g -s octocode-roast
 npx skills add millionco/react-doctor -y -g -s react-doctor
