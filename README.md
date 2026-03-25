@@ -23,7 +23,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-create-pr`](skills/ah-create-pr/SKILL.md)                                       | Analyze the current branch, run quality checks, and create a well-structured GitHub PR with summary, changes, tests, and linked issues.           | `"ah create pr"`, `"ah pr"`                                                                                                                                                         |
 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                               | Orchestrate the full pre-PR finalization: simplify, retrospective, tests, JSDoc, docs, specs, code review, and PR -- committing after each step.  | `"ah finalize code"`, `"ah finalize changes"`                                                                                                                                       |
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.  | `"ah resolve pr review"`                                                                                                                                                            |
-| [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools MCP -- finds timing races between framework DOM cleanup and React re-renders.       | `"ah fix dom flash"`                                                                                                                                                                |
+| [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools CLI -- finds timing races between framework DOM cleanup and React re-renders.       | `"ah fix dom flash"`                                                                                                                                                                |
 | [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.          | `"ah fix ui bug"`                                                                                                                                                                   |
 
 ### How to Use `ah-review-code`
@@ -141,7 +141,7 @@ Optionally accepts a PR number, `#123`, or a full PR URL. If omitted, the skill 
 ah fix dom flash, in the widget component, after dragging the chip onto the button, the chip appears in the bottom left
 ```
 
-Requires Chrome DevTools MCP server connected. The skill injects a flash detector (MutationObserver + requestAnimationFrame), reproduces the interaction via DevTools, and identifies timing races between framework DOM cleanup and React re-renders.
+Requires Chrome DevTools CLI (`chrome-devtools-cli` skill). The skill injects a flash detector (MutationObserver + requestAnimationFrame) from `scripts/`, reproduces the interaction via DevTools, and identifies timing races between framework DOM cleanup and React re-renders.
 
 ### How to Use `ah-fix-ui-bug`
 
