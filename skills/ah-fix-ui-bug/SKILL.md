@@ -39,15 +39,18 @@ Get oriented -- see what's on the page and identify element UIDs.
 # Navigate to the page with the bug
 chrome-devtools navigate_page --url "http://localhost:6006/iframe.html?id=..."
 
-# Take an accessibility tree snapshot (lists elements with UIDs for clicking)
+# Prefer take_snapshot as the primary inspection tool -- it returns a structured
+# a11y tree with element UIDs needed for click/hover/drag commands
 chrome-devtools take_snapshot --verbose true
 
-# Take a visual screenshot for reference
+# Take a visual screenshot only when you need a visual reference
 chrome-devtools take_screenshot --filePath /tmp/before.png
 ```
 
 The a11y snapshot returns elements like `uid=6_2 button "Apple"`. These UIDs
-are used in subsequent click/hover commands.
+are used in subsequent click/hover commands. Always prefer `take_snapshot` over
+`take_screenshot` for debugging -- it provides structured, queryable data
+instead of just a visual image.
 
 For Storybook, use the iframe URL (`/iframe.html?id=...`) to avoid Storybook's
 own UI interfering with snapshots.
@@ -202,10 +205,14 @@ chrome-devtools evaluate_script "() => {
 Reproduce the bug while instrumentation is active.
 
 ```bash
-# Click elements by UID (from take_snapshot)
+# Click elements by UID (from take_snapshot) -- use --includeSnapshot to get
+# updated a11y tree immediately after the click
 chrome-devtools click "<uid>" --includeSnapshot true
 
-# Take screenshot at key moments
+# Take a snapshot after interaction to inspect DOM state changes
+chrome-devtools take_snapshot --verbose true
+
+# Take screenshot only when visual confirmation is needed
 chrome-devtools take_screenshot --filePath /tmp/after-click.png
 
 # Read injected console logs
@@ -301,11 +308,13 @@ Fix: Use a React Portal (`createPortal`) to render the fixed element on
 After applying a code fix:
 
 1. Reload the page: `chrome-devtools navigate_page --url "..."`
-2. Re-inject verification scripts (position tracking, animation logging)
-3. Repeat the interaction: `chrome-devtools click "<uid>" --includeSnapshot true`
-4. Confirm no position diffs, correct animation targets
-5. Take final screenshot: `chrome-devtools take_screenshot --filePath /tmp/fixed.png`
-6. Optionally ask user to verify manually for pointer-event-dependent bugs
+2. Take snapshot to get fresh UIDs: `chrome-devtools take_snapshot --verbose true`
+3. Re-inject verification scripts (position tracking, animation logging)
+4. Repeat the interaction: `chrome-devtools click "<uid>" --includeSnapshot true`
+5. Take snapshot to confirm DOM state is correct: `chrome-devtools take_snapshot --verbose true`
+6. Confirm no position diffs, correct animation targets
+7. Take final screenshot for visual proof: `chrome-devtools take_screenshot --filePath /tmp/fixed.png`
+8. Optionally ask user to verify manually for pointer-event-dependent bugs
 
 ### 6. Report to User
 
@@ -326,6 +335,7 @@ Present findings and resolution:
 
 ## Important Notes
 
+- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots are only needed for visual confirmation.
 - All JavaScript snippets use `chrome-devtools evaluate_script`. The function must be an arrow function returning a JSON-serializable value.
 - Selectors in the diagnostic recipes (e.g., `[data-button-id]`, `.my-element`) are placeholders -- customize them for the specific bug.
 - The Position Tracking recipe runs a `requestAnimationFrame` loop that continues until page reload. This is intentional for capturing intermittent shifts.
