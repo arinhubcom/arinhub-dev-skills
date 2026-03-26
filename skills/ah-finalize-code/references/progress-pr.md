@@ -58,7 +58,27 @@
 - artifacts:
 - findings:
 
-## 5. API Docs Updater
+## 5a. API Docs Updater
+
+- status: not started
+- started:
+- ended:
+- duration:
+- commit: (shared with 5b)
+- artifacts:
+- findings:
+
+## 5b. Spec Finalizer
+
+- status: not started
+- started:
+- ended:
+- duration:
+- commit: (shared with 5a)
+- artifacts:
+- findings:
+
+## 6. Code Reviewer
 
 - status: not started
 - started:
@@ -68,37 +88,7 @@
 - artifacts:
 - findings:
 
-## 6. Spec Optimizer
-
-- status: not started
-- started:
-- ended:
-- duration:
-- commit:
-- artifacts:
-- findings:
-
-## 7. Spec Updater
-
-- status: not started
-- started:
-- ended:
-- duration:
-- commit:
-- artifacts:
-- findings:
-
-## 8. Code Reviewer
-
-- status: not started
-- started:
-- ended:
-- duration:
-- commit:
-- artifacts:
-- findings:
-
-## 9. PR Creator
+## 7. PR Creator
 
 - status: not started
 - started:
@@ -109,7 +99,8 @@
 
 ## Summary
 
-- total steps: 0/9
+- total steps: 0/8
+- skipped steps:
 - status: not started
 - total duration: pending
 - warnings:
