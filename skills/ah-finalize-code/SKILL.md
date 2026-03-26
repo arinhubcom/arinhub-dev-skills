@@ -33,6 +33,7 @@ mkdir -p "${PROGRESS_DIR}"
 Before reading spec.md or doing any work, verify the branch is in a usable state:
 
 1. **Branch has changes**: Compare the current branch against the expected base. If there are no commits ahead of the base, abort and tell the user there is nothing to finalize.
+
    ```bash
    # Quick check -- will be refined after BASE_BRANCH is known
    git log --oneline -1
@@ -103,7 +104,8 @@ Then spawn subagent **committer** (Sonnet) -- run `/commit`.
 
 Spawn subagent **retrospective** (Opus, ultrathink):
 
-- Run `/speckit.retrospective.analyze` with prompt: `On the end fix follow-up actions in retrospective file and update retrospective file`
+- Run `/speckit.retrospective.analyze`
+- After the skill finishes, fix any follow-up actions listed in the retrospective.md file and update the retrospective file accordingly
 - Record start/end timestamps and update `${PROGRESS_FILE}` Retrospective section
 
 Then spawn subagent **committer** (Sonnet) -- run `/commit`.
@@ -150,7 +152,48 @@ Then spawn subagent **committer** (Sonnet) -- run `/commit`.
 Spawn subagent **spec-optimizer** (Opus, ultrathink):
 
 - Get fresh diff: `git diff "${MERGE_BASE}"`
-- Prompt: `Optimize the "${SPEC_DIR}/" folder by reading all files, removing redundant ones (completed research, moved quickstart guides, done checklists/task lists), consolidating key info into the essential files (spec.md, plan.md, data-model.md, retrospective.md, contracts/), removing obsolete contracts and outdated "Next Steps" sections, and verifying no critical context, valid links, or needed information is lost.`
+- Prompt:
+
+  ```
+  Optimize the "${SPEC_DIR}/" folder. Follow these steps in order:
+
+  Step 1 -- Inventory: List every file and subdirectory in "${SPEC_DIR}/".
+
+  Step 2 -- Consolidate before deleting: For each file marked for deletion
+  below, read it and extract any non-obvious decisions, constraints, or
+  context that is NOT already captured in the essential files. Append
+  extracted content to the most relevant essential file (spec.md for
+  requirements/decisions, plan.md for architecture/implementation details,
+  data-model.md for schema/type info).
+
+  Step 3 -- Delete redundant files: Remove the following files (they served
+  their purpose during planning and are now consumed):
+    - research.md -- research findings should already be in spec.md/plan.md
+    - tasks.md -- tasks are completed, tracked in git history
+    - checklist.md -- checklist items are done
+    - requirements.md -- requirements are in spec.md
+    - Any quickstart guide files (e.g. quickstart.md, getting-started.md)
+    - Any other temporary/working files not listed as essential below
+
+  Step 4 -- Keep essential files: These files MUST be preserved:
+    - spec.md -- core specification with metadata (Base Branch, Issue Number)
+    - plan.md -- implementation plan and architecture decisions
+    - data-model.md -- data model definitions and schema
+    - retrospective.md -- implementation retrospective
+    - contracts/ directory -- but only contracts still referenced by the
+      codebase; delete any contract file whose types/interfaces no longer
+      exist in the current diff
+
+  Step 5 -- Clean up kept files: In each essential file:
+    - Remove "Next Steps" sections (implementation is done)
+    - Remove "TODO" or "TBD" markers that are resolved
+    - Remove references to deleted files
+    - Fix any broken internal links between the remaining files
+
+  Step 6 -- Verify: Confirm that no critical context, valid cross-references,
+  or needed information was lost. List any files deleted and any content
+  consolidated.
+  ```
 - Record start/end timestamps and update `${PROGRESS_FILE}` Spec Optimizer section
 
 Then spawn subagent **committer** (Sonnet) -- run `/commit`.
