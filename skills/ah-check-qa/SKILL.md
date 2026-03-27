@@ -427,7 +427,12 @@ chrome-devtools take_snapshot --verbose true
 # Compare: did the state persist (URL params, visible selections)?
 ```
 
-### 9. Before/After Comparison
+### 9. Resilience / Break Testing
+
+Follow the procedure in [resilience-testing.md](references/resilience-testing.md).
+Sub-steps are labeled 9a through 9g in the report and procedure.
+
+### 10. Before/After Comparison
 
 Check if baseline screenshots exist:
 
@@ -449,7 +454,7 @@ If a baseline exists, compare current screenshots against it. For each pair:
 
 Include both screenshot paths in the report so the user can view them.
 
-### 10. Generate QA Report
+### 11. Generate QA Report
 
 Compile all findings into a report file. Read the format from
 [report-format.md](references/report-format.md).

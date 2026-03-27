@@ -17,6 +17,7 @@ Use this template when generating the final QA report.
 |---|---|---|---|
 | UI Visual | {n} | {n} | {n} |
 | UX Interaction | {n} | {n} | {n} |
+| Resilience | {n} | {n} | {n} |
 | E2E Smoke Tests | {pass}/{total} passed | | |
 
 ### Lighthouse Scores
@@ -83,6 +84,40 @@ Use this template when generating the final QA report.
 ### Failed
 
 - [ ] {flow-name}: {what failed and at which step}
+
+## Resilience Tests
+
+### Script Results
+
+| Test | Result | Details |
+|---|---|---|
+| XSS Prevention | {PASS/FAIL} | {details} |
+| Input Fuzzing | {PASS/FAIL} | {details} |
+| Rapid Click Stress | {PASS/FAIL} | {details} |
+| Form Double-Submit | {PASS/FAIL} | {details} |
+| DOM Mutation Resilience | {PASS/FAIL} | {details} |
+| Rapid Event Dispatch | {PASS/FAIL} | {details} |
+| LocalStorage Boundary | {PASS/FAIL} | {details} |
+| Global State Exposure | {PASS/FAIL} | {details} |
+| Error Boundary Present | {PASS/FAIL} | {details} |
+
+### Stress Test Results
+
+| Test | Result | Details |
+|---|---|---|
+| Rapid Navigation | {PASS/FAIL} | {new errors or "no new errors"} |
+| Viewport Stress | {PASS/FAIL} | {layout breakage or "layout intact"} |
+| Network Throttle | {PASS/FAIL} | {timeout errors, stuck UI, or "handled gracefully"} |
+| Keyboard Stress | {PASS/FAIL} | {new errors or "no new errors"} |
+
+### Resilience Issues
+
+#### {issue-number}. {title}
+
+- **Test:** {test-name}
+- **Severity:** {critical/warning/info}
+- **Description:** {what broke and how}
+- **Impact:** {security risk, data loss, crash, degraded UX}
 
 ## Console Errors
 
