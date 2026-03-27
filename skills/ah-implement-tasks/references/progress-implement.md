@@ -18,13 +18,16 @@
 - findings:
 - user-decisions:
 
-## 2. Context Loading
+## 2. Implementation Context
 
 - status: not started
 - started:
 - ended:
 - duration:
 - skills-loaded:
+- library-docs-fetched:
+- opensrc-packages:
+- repomix-scope:
 - findings:
 
 ## 3. Implementation Pass 1
@@ -36,6 +39,7 @@
 - commit:
 - tasks-completed:
 - tasks-remaining:
+- tools-used:
 - findings:
 
 ## 4. Implementation Pass 2
@@ -47,6 +51,8 @@
 - commit:
 - tasks-completed:
 - tasks-remaining:
+- diagnosis:
+- tools-used:
 - findings:
 
 ## 5. Implementation Pass 3
@@ -58,6 +64,8 @@
 - commit:
 - tasks-completed:
 - tasks-remaining:
+- diagnosis:
+- tools-used:
 - findings:
 
 ## Summary
