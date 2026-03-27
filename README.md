@@ -2,6 +2,25 @@
 
 Collection of AI agents, hooks, and [skills](skills).
 
+## Development workflow for implementing a new feature or fixing a bug
+
+```sh
+# Create PRD and ADR files from description.
+- /ah-create-prd-adr
+
+# Create implementation tasks from PRD and ADR files.
+- /ah-create-tasks
+
+# Implement tasks with TDD, React best practices, and automatic retry for incomplete tasks.
+- /ah-implement-tasks
+
+# Check UI and performance quality with automated checks and E2E smoke tests.
+- /ah-check-qa
+
+# Finalize code with simplification, retrospectives, code review, and PR creation.
+- /ah-finalize-code
+```
+
 ## Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
