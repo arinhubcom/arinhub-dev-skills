@@ -1,18 +1,25 @@
 ---
 name: ah-create-tasks
-description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step.
-argument-hint: "path to prd.md file and adr.md file"
+description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step. Also supports "update" mode (e.g., "ah create tasks update 001") which skips initial specify/verify steps, creates a new branch, and starts from clarify.
+argument-hint: "path to prd.md and adr.md files, optionally 'update <spec-number>' for update mode"
 ---
 
 # Create Tasks from PRD and ADR
 
 Orchestrate the full Spec Kit pipeline to transform a `prd.md` and `adr.md` file into a well-structured `tasks.md` file. The workflow generates intermediate design artifacts (spec.md, plan.md, research.md, checklists), performs consistency checks, and commits after each major step.
 
+Supports two modes:
+
+- **Create mode** (default): Runs the full pipeline from specify through task generation.
+- **Update mode**: Requires a spec number (e.g., `001`). Creates a new git branch, skips steps 1-4 (specify/verify), and starts from Clarify using the PRD to generate the clarification prompt.
+
 ## Input
 
 - **prd.md path** (required): Path to the PRD file that describes the feature. If not provided by the user, ask before proceeding.
 - **adr.md path** (required): Path to the ADR (Architectural Decision Records) file that describes architectural decisions, constraints, and rationale. If not provided by the user, ask before proceeding.
 - **issue number** (required): The GitHub issue number this feature relates to (e.g., `42`). If not provided by the user, ask before proceeding.
+- **mode** (optional): `update` to skip steps 1-4 and start from Clarify. Default is create (full pipeline).
+- **spec number** (required in update mode): The spec number (e.g., `001`). Used to construct the branch name.
 
 ## Configuration
 
@@ -29,11 +36,49 @@ REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 PROGRESS_TEMPLATE="progress-tasks.md"
 ```
 
-If the user did not provide **prd.md path**, **adr.md path**, or **issue number**, ask them for all missing values now (before any other work begins). Store these values as `PRD_PATH`, `ADR_PATH`, and `ISSUE_NUMBER`.
+Determine the **mode**:
+
+- If the user said "update" and provided a spec number, set `MODE=update` and store the spec number as `SPEC_NUMBER`.
+- Otherwise, set `MODE=create`.
+
+If the user did not provide **prd.md path**, **adr.md path**, or **issue number**, ask them for all missing values now (before any other work begins). In update mode, also ask for **spec number** if not provided. Store these values as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (in update mode) `SPEC_NUMBER`.
 
 Verify that `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either file does not exist, ask the user for the correct path.
 
+#### Update Mode Branch Setup
+
+If `MODE=update`:
+
+1. Resolve the git branch prefix:
+
+   ```bash
+   GIT_BRANCH_PREFIX="${GIT_BRANCH_PREFIX:-}"
+   ```
+
+   If `GIT_BRANCH_PREFIX` is empty, ask the user for their branch prefix (e.g., `jj`).
+
+2. Read `prd.md` at `${PRD_PATH}` and derive a short kebab-case branch description from its title/main feature (e.g., `fix-submit-button`). The description should capture the main feature or fix in 2-5 words.
+
+3. Create and switch to the new branch:
+
+   ```bash
+   BRANCH_DESCRIPTION="<derived-kebab-case-description>"
+   NEW_BRANCH_NAME="${GIT_BRANCH_PREFIX}/${SPEC_NUMBER}-${BRANCH_DESCRIPTION}"
+   git checkout -b "${NEW_BRANCH_NAME}"
+   SPEC_DIR="specs/${NEW_BRANCH_NAME}"
+   SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
+   PROGRESS_FILE="~/.agents/arinhub/progresses/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+   ```
+
+4. Initialize `${PROGRESS_FILE}` using the template `references/${PROGRESS_TEMPLATE}`. Replace all `<PLACEHOLDER>` values with actual values. Mark Specifier and Spec Verifier sections as `status: skipped (update mode)` in the progress file.
+
+5. Verify that `${SPEC_DIR}` exists and contains `spec.md`. If not, create the directory and report to the user that a new `spec.md` will be generated during the Clarify step.
+
+6. **Skip steps 1-4. Proceed directly to step 5 (Clarify).**
+
 ### 1. Specify
+
+> **Update mode**: Skip this step and steps 2-4. Proceed directly to step 5 (Clarify).
 
 Read `prd.md` at `${PRD_PATH}` and distill it into a prompt for the `/speckit.specify` command. The prompt should focus on **what** and **why** -- strip out tech stack details, implementation specifics, and architecture choices. Keep only the user-facing requirements, goals, motivation, and any relevant context that would be important for a specifier to know when writing the initial `spec.md`. The goal is to create a clear and concise prompt that captures the essence of the feature without prescribing how it should be implemented.
 
@@ -77,6 +122,8 @@ Spawn subagent **committer** (Sonnet):
 - Run `/commit`
 
 ### 5. Clarify
+
+**Update mode**: Read `prd.md` at `${PRD_PATH}` and distill it into a prompt for `/speckit.clarify`. The prompt should focus on **what** and **why** -- strip out tech stack details, implementation specifics, and architecture choices. Keep only the user-facing requirements, goals, motivation, and any relevant context that would be important for a clarifier to know when refining the `spec.md`. Pass this prompt to `/speckit.clarify`.
 
 Run `/speckit.clarify` yourself (not as a subagent -- this command may require user interaction).
 
@@ -211,6 +258,8 @@ Present a summary:
 
 ## Workflow Diagram
 
+### Create Mode (default)
+
 ```
 prd.md + adr.md
   |        |
@@ -222,6 +271,43 @@ prd.md + adr.md
   |        |
   v        |
 [5] /speckit.clarify --> user Q&A --> updates spec.md
+  |        |
+  v        v
+[7] /speckit.plan --> plan.md, research.md, data-model.md (uses adr.md)
+  |
+  v
+[9] researcher --> updates research.md
+  |
+  v
+[11] complexity-checker --> user picks fixes
+  |
+  v
+[13-14] /speckit.checklist --> checklist-checker --> fixes gaps
+  |
+  v
+[16] /speckit.tasks --> tasks.md
+  |
+  v
+[18] /speckit.analyze (pass 1) --> fixes
+  |
+  v
+[20] /speckit.analyze (pass 2) --> fixes
+  |
+  v
+tasks.md (final)
+```
+
+### Update Mode
+
+```
+prd.md + adr.md + spec number
+  |        |
+  |   [0] create branch: ${GIT_BRANCH_PREFIX}/${SPEC_NUMBER}-${description}
+  |        |
+  |   [1-4] SKIPPED
+  |        |
+  v        |
+[5] /speckit.clarify (prompt distilled from prd.md) --> user Q&A --> updates spec.md
   |        |
   v        v
 [7] /speckit.plan --> plan.md, research.md, data-model.md (uses adr.md)
