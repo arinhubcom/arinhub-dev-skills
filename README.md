@@ -31,7 +31,7 @@ Collection of AI agents, hooks, and [skills](skills).
 ## Installation
 
 ```sh
-npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
 ```
 
 ## Agent Skills
@@ -47,6 +47,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                            | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
 | [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                                 | Create tasks from a PRD and ADR using the full Spec Kit pipeline with consistency analysis passes.                                                | `"ah create tasks"`                                                                                                                                                                 |
 | [`ah-implement-tasks`](skills/ah-implement-tasks/SKILL.md)                           | Load React best practices context, then execute tasks from tasks.md phase-by-phase with TDD and automatic retry for incomplete tasks.             | `"ah implement tasks"`                                                                                                                                                              |
+| [`ah-check-qa`](skills/ah-check-qa/SKILL.md)                                         | Run UI/UX quality checks with Chrome DevTools: visual inspection, Lighthouse audits, interaction testing, E2E smoke tests, and screenshot comparison. | `"ah check qa"`, `"ah check qa before"`, `"ah check qa http://localhost:3000"`                                                                                                      |
 | [`ah-create-pr`](skills/ah-create-pr/SKILL.md)                                       | Analyze the current branch, run quality checks, and create a well-structured GitHub PR with summary, changes, tests, and linked issues.           | `"ah create pr"`, `"ah pr"`                                                                                                                                                         |
 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                               | Orchestrate the full pre-PR finalization: simplify, retrospective, tests, JSDoc, docs, specs, code review, and PR -- committing after each step.  | `"ah finalize code"`, `"ah finalize changes"`                                                                                                                                       |
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.  | `"ah resolve pr review"`                                                                                                                                                            |
@@ -140,6 +141,35 @@ Install the required skills:
 ```sh
 npx skills add vercel/components.build -y -g -s building-components
 npx skills add vercel-labs/agent-skills -y -g -s vercel-react-best-practices -s vercel-composition-patterns
+```
+
+### How to Use `ah-check-qa`
+
+Run from a feature branch after implementing tasks. Auto-detects the running dev server and discovers routes from the project structure.
+
+```sh
+# Full QA audit (auto-detect dev server and routes)
+/ah-check-qa
+# or
+ah check qa
+
+# Capture baseline screenshots before refactoring
+/ah-check-qa before
+# or
+ah check qa before
+
+# Target a specific URL
+/ah-check-qa http://localhost:3000/settings
+# or
+ah check qa http://localhost:3000/settings
+```
+
+Runs visual inspection, Lighthouse audits, interaction testing, dark mode checks (if supported), E2E smoke tests, and generates a report with screenshots. When baseline screenshots exist from a prior `before` run, automatically compares current vs. baseline and flags regressions.
+
+#### Required Skills
+
+```sh
+npx skills add ChromeDevTools/chrome-devtools-mcp -y -g -s chrome-devtools-cli
 ```
 
 ### How to Use `ah-submit-code-review`
