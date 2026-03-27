@@ -1,17 +1,24 @@
 ---
 name: ah-implement-tasks
-description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Loads React and component best practices context (composition patterns, React performance guidelines, component building) before execution, then runs the speckit.implement workflow to process all tasks phase-by-phase with TDD, progress tracking, and validation. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
-argument-hint: "optional: feature directory path, specific task IDs, or additional instructions for implementation"
+description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Validates prerequisites, detects the project's tech stack to load relevant best-practice context (React composition patterns, performance guidelines, component building), then runs speckit.implement as a subagent with TDD, progress tracking, and commit-after-pass. Supports resume from interrupted runs, monorepo scoping, and automatic retry on incomplete passes. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
+argument-hint: "optional: feature directory path, specific task IDs, skip phases, or additional instructions"
 ---
 
 # Implement Tasks
 
-Execute the implementation plan from tasks.md with React and component best practices loaded as context. The skill loads reference knowledge first so that all coding decisions during implementation are informed by proven patterns, then delegates to `/speckit.implement` for the actual task execution.
+Execute the implementation plan from tasks.md with full orchestration: pre-validation, tech-stack-aware best-practice context loading, subagent-driven implementation with commits after each pass, automatic retry, and progress tracking.
+
+## Configuration
+
+- **Subagent defaults**: Opus with ultrathink effort for all subagents except `committer` (Sonnet).
+- **Committer protocol**: After each implementation pass that produces changes, spawn subagent **committer** (Sonnet) to run `/commit`. If a pass produced no file changes, skip the commit.
+- **Fresh diff rule**: Each implementation subagent computes `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous passes.
 
 ## Input
 
-- **feature directory** (optional): Path to the feature's spec directory containing tasks.md. If omitted, `speckit.implement` auto-detects it via the prerequisites script.
-- **additional instructions** (optional): Any extra guidance to forward to `/speckit.implement` (e.g., specific task IDs, phases to focus on).
+- **feature directory** (optional): Path to the feature's spec directory containing tasks.md. If omitted, auto-detected via the prerequisites script.
+- **additional instructions** (optional): Extra guidance to forward to `/speckit.implement` (e.g., specific task IDs, phases to focus on).
+- **skip directives** (optional): `skip context` to skip best-practice loading, `skip checklists` to skip checklist verification.
 
 ## Procedure
 
@@ -20,96 +27,184 @@ Execute the implementation plan from tasks.md with React and component best prac
 ```bash
 BRANCH_NAME=$(git branch --show-current)
 REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
+SAFE_BRANCH_NAME=$(echo "${BRANCH_NAME}" | tr '/' '-')
+SPEC_DIR="specs/${BRANCH_NAME}"
+PROGRESS_DIR=~/.agents/arinhub/progresses
+PROGRESS_FILE="${PROGRESS_DIR}/progress-implement-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+
+mkdir -p "${PROGRESS_DIR}"
 ```
 
-Verify the branch has a tasks.md file available (either in `specs/${BRANCH_NAME}/` or detectable by the speckit prerequisites script). If no tasks.md exists, stop and suggest: "No tasks.md found. Run `/ah-create-tasks` first to generate the task list."
+#### Pre-validation
 
-### 1. Load Best Practices Context
+1. **Tasks exist**: Verify `${SPEC_DIR}/tasks.md` exists. If missing, stop: "No tasks.md found at `${SPEC_DIR}/tasks.md`. Run `/ah-create-tasks` first."
 
-Invoke the following three skills sequentially to load their guidance into the current session. These provide the coding standards and patterns that apply to all code written during implementation -- composition, performance, and accessibility decisions should follow this guidance.
+2. **Spec exists**: Verify `${SPEC_DIR}/spec.md` exists. If missing, stop: "No spec.md found. The spec directory may be incomplete."
 
-1. **`/vercel-composition-patterns`** -- React composition patterns that scale: compound components, render props, context providers, slot patterns. Informs how to structure components and avoid boolean prop proliferation.
+3. **No uncommitted changes**: Run `git status --porcelain`. If there are uncommitted changes, ask the user whether to stash, commit first, or abort.
 
-2. **`/vercel-react-best-practices`** -- React and Next.js performance optimization from Vercel Engineering. Informs data fetching, bundle optimization, rendering strategies, and Server Component usage.
+#### Extract metadata
 
-3. **`/building-components`** -- Guide for building modern, accessible, composable UI components. Informs component API design, accessibility implementation, design tokens, and documentation.
+Read `${SPEC_DIR}/spec.md` and extract:
 
-After loading all three, briefly confirm to the user which best-practice contexts were loaded (one line each) before proceeding.
+- `BASE_BRANCH` from the **Base Branch** metadata field
+- `ISSUE_NUMBER` from the **Issue Number** metadata field
 
-### 2. Execute Implementation (first pass)
+If either is missing, ask the user before proceeding.
 
-Invoke `/speckit.implement` with any user-provided arguments forwarded.
+#### Detect tech stack
 
-The `speckit.implement` command handles the full implementation lifecycle:
+Read `${SPEC_DIR}/plan.md` (and `package.json` if it exists) to determine the project's tech stack:
 
-- Validates prerequisites (tasks.md, plan.md must exist)
-- Checks checklist completion status (pauses if incomplete)
-- Loads implementation context (plan.md, data-model.md, contracts/, research.md)
-- Verifies project setup (ignore files, tooling configuration)
-- Parses task phases: Setup, Tests, Core, Integration, Polish
-- Executes tasks phase-by-phase following TDD order (tests before implementation)
-- Respects dependencies: sequential tasks in order, parallel tasks `[P]` concurrently
-- Tracks progress by marking completed tasks `[X]` in tasks.md
-- Halts on non-parallel task failures, continues past parallel failures
-- Validates completion against the specification
+| Stack | Indicators |
+|-------|-----------|
+| React / Next.js | `react` in dependencies, `.tsx`/`.jsx` files, Next.js config |
+| Vue | `vue` in dependencies, `.vue` files |
+| Svelte | `svelte` in dependencies, `.svelte` files |
+| Angular | `@angular/core` in dependencies |
+| Non-frontend | No frontend framework detected |
 
-The best practices loaded in step 1 remain in context throughout execution -- apply them when writing components, structuring code, and making architectural micro-decisions.
+Store the detected stack as `TECH_STACK` for step 2.
 
-### 3. Verify Completion and Retry
+#### Monorepo detection
 
-After the first `/speckit.implement` pass finishes, read `tasks.md` and check whether all tasks are marked `[X]`. If any tasks remain uncompleted (`[ ]`):
+If the repository is a monorepo (multiple `package.json` files, workspace configuration in root `package.json`, or monorepo tools like turborepo/nx), identify the target application from the changed file paths or tasks.md references. Scope all commands (test, lint, build) to that application.
 
-1. Report which tasks are still open (list task IDs and descriptions).
-2. Invoke `/speckit.implement` again -- it will pick up from where it left off because only uncompleted tasks remain.
-3. After the second pass, read `tasks.md` once more. If tasks are still incomplete, report them to the user and ask how to proceed (retry, skip, or investigate).
+#### Initialize progress file
 
-This retry mechanism handles cases where a single pass runs into context limits, transient failures, or long task lists that cannot be fully processed in one run.
+Read the template from `references/progress-implement.md`, replace all `<BRANCH_NAME>`, `<BASE_BRANCH>`, `<ISSUE_NUMBER>`, `<TECH_STACK>`, and `<TIMESTAMP>` placeholders with actual values, and write to `${PROGRESS_FILE}`.
 
-### 4. Report
+If `${PROGRESS_FILE}` already exists:
 
-After all tasks are completed (or the user decides to stop), present:
+- **Resume**: If some steps are completed, show progress and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
+- **Restart**: Overwrite with a fresh template.
 
-- Summary of completed tasks by phase
+#### Compute merge base
+
+```bash
+git fetch origin "${BASE_BRANCH}" --quiet
+MERGE_BASE=$(git merge-base "origin/${BASE_BRANCH}" HEAD)
+```
+
+### 1. Check Checklists (main session)
+
+Skip if user specified `skip checklists`.
+
+If `${SPEC_DIR}/checklists/` exists, scan all checklist files:
+
+- Count total, completed (`[X]`/`[x]`), and incomplete (`[ ]`) items per file
+- Display a status table:
+
+  ```text
+  | Checklist   | Total | Done | Remaining | Status |
+  |-------------|-------|------|-----------|--------|
+  | ux.md       | 12    | 12   | 0         | PASS   |
+  | test.md     | 8     | 5    | 3         | FAIL   |
+  ```
+
+- **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If the user declines, halt execution.
+- **If all complete or no checklists directory**: Proceed automatically.
+
+Update `${PROGRESS_FILE}` Checklists section.
+
+### 2. Load Best Practices Context
+
+Skip if user specified `skip context`.
+
+Based on `TECH_STACK` detected in step 0, determine which skills the implementation subagent should load:
+
+| Tech Stack | Skills to Load |
+|-----------|---------------|
+| React / Next.js | `/vercel-composition-patterns`, `/vercel-react-best-practices`, `/building-components` |
+| Vue / Svelte / Angular | `/building-components` |
+| Non-frontend | (none -- skip this step entirely) |
+
+Store the skill list as `CONTEXT_SKILLS`. The implementation subagent in step 3 invokes these skills at the start of its session so the guidance is in context during coding.
+
+Briefly confirm to the user which best-practice contexts will be loaded (one line each).
+
+Update `${PROGRESS_FILE}` Context Loading section.
+
+### 3. Execute Implementation (Pass 1)
+
+Spawn subagent **implementer** (Opus, ultrathink):
+
+- If `CONTEXT_SKILLS` is not empty, first invoke each skill to load best-practice guidance into the session
+- Then run `/speckit.implement` with any user-provided arguments forwarded
+- The loaded best practices remain in context throughout -- apply them when writing components, structuring code, and making architectural micro-decisions
+
+After the subagent completes, update `${PROGRESS_FILE}` Implementation Pass 1 section with tasks completed, tasks remaining, and any errors.
+
+Spawn subagent **committer** (Sonnet): Run `/commit`.
+
+### 4. Verify and Retry
+
+Read `${SPEC_DIR}/tasks.md` and check whether all tasks are marked `[X]`.
+
+**If all complete**: Skip to step 5.
+
+**If tasks remain (`[ ]`)**: Run up to 2 additional passes (3 total). For each retry:
+
+1. Report which tasks are still open (task IDs and descriptions).
+2. Spawn subagent **implementer-pass-N** (Opus, ultrathink):
+   - Load `CONTEXT_SKILLS` again (fresh context window needs them reloaded)
+   - Run `/speckit.implement` -- it picks up uncompleted tasks automatically because only `[ ]` tasks remain
+3. Update `${PROGRESS_FILE}` Implementation Pass N section.
+4. Spawn subagent **committer** (Sonnet): Run `/commit`.
+5. Re-read `tasks.md` -- if all complete, break out of retry loop.
+
+**If still incomplete after 3 passes**: Report the remaining tasks with their IDs and descriptions, and ask the user how to proceed:
+- Retry again
+- Skip remaining tasks and continue to report
+- Investigate specific failures
+
+### 5. Report
+
+Present a summary:
+
+- Path to `${PROGRESS_FILE}` with the full audit trail
+- Completed tasks by phase (Setup, Tests, Core, Integration, Polish)
 - Any failures or skipped tasks with reasons
-- How many passes were needed (1 or 2)
+- How many passes were needed (1, 2, or 3)
 - Test results and coverage status
-- Next steps (e.g., run `/ah-finalize-code` to prepare for PR)
+- Next steps: run `/ah-finalize-code` to prepare for PR
 
 ## Workflow Diagram
 
 ```
-[0] Initialize -- verify tasks.md exists
+[0] Initialize -- validate, detect tech stack, check/resume progress
  |
  v
-[1] Load best practices context
-    /vercel-composition-patterns
-    /vercel-react-best-practices
-    /building-components
+[1] Check checklists (main session, may pause for user)
  |
  v
-[2] /speckit.implement -- execute all tasks (first pass)
-    Setup --> Tests --> Core --> Integration --> Polish
+[2] Determine best-practice skills to load
  |
  v
-[3] Check tasks.md -- all [X]?
+[3] Subagent: load context + /speckit.implement (pass 1) --> commit
+ |
+ v
+[4] All tasks [X]?
     |            |
    YES          NO
-    |            |
-    v            v
-   [4]     /speckit.implement (second pass)
-    |            |
-    |            v
-    |       All done? -- NO --> ask user
-    |            |
-    |           YES
-    v            |
-[4] Report  <---+
+    |            |-- Subagent: /speckit.implement (pass 2) --> commit
+    |            |-- All [X]? --NO--> pass 3 --> commit
+    |            |                      |
+    |           YES                  All [X]? --NO--> ask user
+    |            |                      |
+    v            v                     YES
+[5] Report  <--------------------------+
 ```
 
 ## Important Notes
 
-- This skill runs in the main session (not spawned as subagents) because `/speckit.implement` may pause for user input (e.g., incomplete checklists) and the best-practices context must remain available throughout.
-- The three reference skills are loaded for their knowledge -- they inform coding decisions but do not produce output files themselves.
-- If the project is not React-based, the composition and React skills still provide useful general component patterns. The implementation adapts the principles to whatever framework is in use.
+- Every subagent except `committer` runs on Opus with ultrathink. The `committer` runs on Sonnet and only creates a commit via `/commit`.
+- The `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
+- **Resume support**: Re-running the skill detects an existing progress file and offers to resume from the last incomplete step. Completed steps and their commits are skipped.
+- **Duration tracking**: Each subagent records start/end timestamps and computes duration (e.g., `duration: 2m 34s`).
+- **Tech stack detection** informs which best-practice skills are loaded. React/Next.js projects get the full set; other frontend frameworks get component-building guidance; non-frontend projects skip context loading entirely.
+- **Monorepo support**: If the repo is a monorepo, commands are scoped to the target application identified from tasks.md or changed file paths.
 - All Spec Kit output files live in `specs/<branch-name>/`.
+- If any subagent fails, note the failure in `${PROGRESS_FILE}` and report to the user. Do not silently skip steps.
 - After implementation is complete, the natural next step is `/ah-finalize-code` which handles simplification, testing, docs, code review, and PR creation.
+- Base branch and issue number come from `spec.md` metadata -- if missing, ask the user.
