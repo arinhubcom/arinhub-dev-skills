@@ -6,7 +6,14 @@ Collection of AI agents, hooks, and [skills](skills).
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated with repo access
+- [Spec Kit](https://github.com/github/spec-kit)
 - Node.js with `npx` available
+
+## Installation
+
+```sh
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
+```
 
 ## Agent Skills
 
@@ -20,6 +27,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                               | `"ah submit code review 123"`                                                                                                                                                       |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                            | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
 | [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                                 | Create tasks from a PRD and ADR using the full Spec Kit pipeline with consistency analysis passes.                                                | `"ah create tasks"`                                                                                                                                                                 |
+| [`ah-implement-tasks`](skills/ah-implement-tasks/SKILL.md)                           | Load React best practices context, then execute tasks from tasks.md phase-by-phase with TDD and automatic retry for incomplete tasks.             | `"ah implement tasks"`                                                                                                                                                              |
 | [`ah-create-pr`](skills/ah-create-pr/SKILL.md)                                       | Analyze the current branch, run quality checks, and create a well-structured GitHub PR with summary, changes, tests, and linked issues.           | `"ah create pr"`, `"ah pr"`                                                                                                                                                         |
 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                               | Orchestrate the full pre-PR finalization: simplify, retrospective, tests, JSDoc, docs, specs, code review, and PR -- committing after each step.  | `"ah finalize code"`, `"ah finalize changes"`                                                                                                                                       |
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.  | `"ah resolve pr review"`                                                                                                                                                            |
@@ -67,7 +75,6 @@ Install all required commands and skills:
 
 ```sh
 claude plugin install pr-review-toolkit
-npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug
 npx skills add google-gemini/gemini-cli -y -g -s code-reviewer
 npx skills add bgauryy/octocode-mcp -y -g -s octocode-roast
 npx skills add millionco/react-doctor -y -g -s react-doctor
@@ -89,9 +96,32 @@ npx skills update
 ah create tasks path/to/prd.md, path/to/adr.md, issue 42
 ```
 
-#### Required Commands & Skills
+### How to Use `ah-implement-tasks`
 
-The orchestrator launches subagents that depend on the [Spec Kit](https://github.com/github/spec-kit) commands.
+Run from a feature branch after `/ah-create-tasks` has generated a `tasks.md`:
+
+```sh
+/ah-implement-tasks
+# or
+ah implement tasks
+```
+
+Loads `/vercel-composition-patterns`, `/vercel-react-best-practices`, and `/building-components` guidelines into context, then runs `/speckit.implement`. If not all tasks are completed in the first pass, automatically retries once.
+
+#### Required Skills
+
+| Skill                                                                                                                       | Source                     | Description                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------- |
+| [`building-components`](https://github.com/vercel/components.build/blob/main/skills/building-components/SKILL.md)           | `vercel/components.build`  | Modern, accessible, composable UI component guidelines                           |
+| [`vercel-react-best-practices`](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/SKILL.md) | `vercel-labs/agent-skills` | React and Next.js performance optimization from Vercel Engineering               |
+| [`vercel-composition-patterns`](https://github.com/vercel-labs/agent-skills/blob/main/skills/composition-patterns/SKILL.md) | `vercel-labs/agent-skills` | React composition patterns: compound components, render props, context providers |
+
+Install the required skills:
+
+```sh
+npx skills add vercel/components.build -y -g -s building-components
+npx skills add vercel-labs/agent-skills -y -g -s vercel-react-best-practices -s vercel-composition-patterns
+```
 
 ### How to Use `ah-submit-code-review`
 
@@ -141,7 +171,7 @@ Optionally accepts a PR number, `#123`, or a full PR URL. If omitted, the skill 
 ah fix dom flash, in the widget component, after dragging the chip onto the button, the chip appears in the bottom left
 ```
 
-Requires Chrome DevTools CLI (`chrome-devtools-cli` skill). The skill injects a flash detector (MutationObserver + requestAnimationFrame) from `scripts/`, reproduces the interaction via DevTools, and identifies timing races between framework DOM cleanup and React re-renders.
+Requires [`chrome-devtools-cli`](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/skills/chrome-devtools-cli/SKILL.md) skill. The skill injects a flash detector (MutationObserver + requestAnimationFrame) from `scripts/`, reproduces the interaction via DevTools, and identifies timing races between framework DOM cleanup and React re-renders.
 
 ### How to Use `ah-fix-ui-bug`
 
@@ -151,4 +181,10 @@ Requires Chrome DevTools CLI (`chrome-devtools-cli` skill). The skill injects a 
 ah fix ui bug http://localhost:6006/iframe.html?id=my-story, the chip lands at wrong position after drag
 ```
 
-Requires Chrome DevTools CLI (`chrome-devtools-cli` skill). The skill navigates to the page, takes an a11y snapshot, injects diagnostic scripts (layout shift detection, position tracking, mutation observers), reproduces the interaction, and analyzes collected data to identify the root cause. For single-frame flash/flicker timing races, use `ah-fix-dom-flash` instead.
+Requires [`chrome-devtools-cli`](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/skills/chrome-devtools-cli/SKILL.md) skill. The skill navigates to the page, takes an a11y snapshot, injects diagnostic scripts (layout shift detection, position tracking, mutation observers), reproduces the interaction, and analyzes collected data to identify the root cause. For single-frame flash/flicker timing races, use `ah-fix-dom-flash` instead.
+
+#### Required Skills (ah-fix-dom-flash & ah-fix-ui-bug)
+
+```sh
+npx skills add ChromeDevTools/chrome-devtools-mcp -y -g -s chrome-devtools-cli
+```
