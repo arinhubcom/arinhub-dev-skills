@@ -188,3 +188,13 @@ Requires [`chrome-devtools-cli`](https://github.com/ChromeDevTools/chrome-devtoo
 ```sh
 npx skills add ChromeDevTools/chrome-devtools-mcp -y -g -s chrome-devtools-cli
 ```
+
+## How to create your own Agent Skill
+
+```sh
+# https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md
+npx skills add anthropics/skills -y -g -s skill-creator
+
+/skill-creator create skill-name skill in file skills/skill-name/SKILL.md
+/skill-creator improve skill-name skill
+```
