@@ -63,6 +63,18 @@ SCREENSHOTS_DIR=${QA_DIR}/${REPO_NAME}/screenshots
 mkdir -p "${QA_DIR}" "${SCREENSHOTS_DIR}"
 ```
 
+Detect dark mode support by checking for common indicators:
+
+```bash
+# Check for dark mode in Tailwind config, CSS custom properties, or theme providers
+grep -rl "darkMode\|dark:\|prefers-color-scheme\|data-theme\|ThemeProvider" \
+  --include="*.ts" --include="*.tsx" --include="*.css" --include="*.js" --include="*.jsx" \
+  --include="*.json" . | head -5
+```
+
+If dark mode support is detected, set `HAS_DARK_MODE=true` to include dark mode
+testing in Step 4.
+
 ### 1. Route Discovery
 
 Scan the project to build a list of testable routes. Adapt the search to the
@@ -86,6 +98,18 @@ find pages -name "*.tsx" -o -name "*.jsx" 2>/dev/null | grep -v "_app\|_document
 Build a `ROUTES` list from the discovered files. If a focus argument was provided,
 filter to matching routes only. If no routes are discovered, test just the root URL.
 
+**Route prioritization**: When more than 10 routes are discovered, prioritize testing
+in this order rather than testing everything:
+
+1. Root / homepage (always first)
+2. Routes with dynamic segments (e.g., `/users/:id`) -- test one instance of each pattern
+3. Routes with forms or interactive content (settings, checkout, auth pages)
+4. Layout-heavy routes (dashboards, listings)
+5. Simple content pages last
+
+Cap at 8-10 routes unless the user explicitly asks for full coverage. Mention skipped
+routes in the report so nothing is silently ignored.
+
 ### 2. Verify Chrome DevTools Connection
 
 ```bash
@@ -97,10 +121,43 @@ If no pages are available:
 chrome-devtools start
 ```
 
-### 3. Baseline Mode (if `before` argument)
+### 3. Wait for Content and Dismiss Overlays
+
+After navigating to any route throughout this procedure, wait for the page to finish
+loading before taking screenshots or running audits. SPAs and SSR-hydrated apps often
+show spinners or skeleton screens that disappear once data arrives.
+
+```bash
+# Wait for network idle (no pending requests for 500ms)
+chrome-devtools wait_for --event networkIdle --timeout 10000
+```
+
+After the page settles, check for and dismiss blocking overlays (cookie banners,
+newsletter popups, onboarding modals). These interfere with screenshots and interaction
+tests:
+
+```bash
+# Take a snapshot to identify overlay elements
+chrome-devtools take_snapshot --verbose true
+# Look for common patterns: cookie consent, modal backdrops, dialog elements
+# If found, dismiss by clicking accept/close/dismiss buttons
+chrome-devtools click "<dismiss_button_uid>" --includeSnapshot true
+```
+
+Common overlay indicators in the a11y snapshot:
+- Elements with role `dialog` or `alertdialog`
+- Nodes containing "cookie", "consent", "accept", "privacy"
+- Fixed-position elements covering a large portion of the viewport
+
+Dismiss overlays once at the start of the session. If they reappear on navigation
+(unlikely but possible), dismiss again. Note any dismissed overlays in the report
+as informational findings.
+
+### 4. Baseline Mode (if `before` argument)
 
 When the user passes `before`, capture baseline screenshots and exit early.
-These will be used for comparison in a subsequent run.
+These will be used for comparison in a subsequent run. Wait for content to load
+(Step 3) before capturing each screenshot.
 
 ```bash
 BASELINE_DIR=${SCREENSHOTS_DIR}/baseline-$(date +%Y%m%d-%H%M%S)
@@ -125,14 +182,15 @@ echo "${BASELINE_DIR}" > "${SCREENSHOTS_DIR}/latest-baseline.txt"
 
 Report the baseline path to the user and exit. The full QA audit happens on the next run.
 
-### 4. UI Visual QA
+### 5. UI Visual QA
 
-For each discovered route:
+For each discovered route (respecting the priority order from Step 1):
 
-#### 4a. Navigate and Snapshot
+#### 5a. Navigate and Snapshot
 
 ```bash
 chrome-devtools navigate_page --url "${ROUTE_URL}"
+chrome-devtools wait_for --event networkIdle --timeout 10000
 chrome-devtools take_snapshot --verbose true
 ```
 
@@ -142,7 +200,7 @@ Review the a11y snapshot for structural issues:
 - Empty landmark regions
 - Duplicate IDs
 
-#### 4b. Multi-Viewport Screenshots
+#### 5b. Multi-Viewport Screenshots
 
 Capture at three breakpoints and check for layout issues at each:
 
@@ -167,7 +225,7 @@ At each viewport, review the snapshot for responsive issues:
 - Touch targets too small on mobile (< 44x44px)
 - Content hidden unintentionally
 
-#### 4c. Lighthouse Audit
+#### 5c. Lighthouse Audit
 
 ```bash
 chrome-devtools lighthouse_audit
@@ -176,18 +234,18 @@ chrome-devtools lighthouse_audit
 Extract scores for: Performance, Accessibility, Best Practices, SEO.
 Record any failing audits (score < 90) with their descriptions.
 
-#### 4d. Start Performance Trace
+#### 5d. Start Performance Trace
 
 Start the trace after screenshots and Lighthouse are done -- those involve
 viewport resizes and Lighthouse's own page manipulation that would pollute
 the trace. From this point on, the trace captures script injections, clicks,
-hovers, and form fills through Steps 4e-4f and 5.
+hovers, and form fills through Steps 5e-5f and 6.
 
 ```bash
 chrome-devtools performance_start_trace --filePath /tmp/qa-trace-${ROUTE_SLUG}.json
 ```
 
-#### 4e. Visual Audit Script
+#### 5e. Visual Audit Script
 
 Read `scripts/visual-audit.js` and inject it:
 
@@ -198,7 +256,7 @@ chrome-devtools evaluate_script "<visual-audit.js content>"
 The script returns a JSON array of issues found (broken images, text overflow,
 elements outside viewport, empty visible containers). Record all findings.
 
-#### 4f. Console and Network Errors
+#### 5f. Console and Network Errors
 
 ```bash
 chrome-devtools list_console_messages --types error,warning --pageSize 50
@@ -211,9 +269,44 @@ From network requests, identify:
 - Missing resources (404s)
 - Slow requests (> 3s response time)
 
-### 5. UX Interaction QA
+#### 5g. Dark Mode Testing (if detected)
 
-#### 5a. Interactive Elements Audit
+If `HAS_DARK_MODE=true` (detected in Step 0), test the current route in dark mode
+after completing the light-mode checks above. This catches color contrast failures,
+invisible text on dark backgrounds, images without transparent backgrounds clashing
+with dark surfaces, and hardcoded colors that ignore theme variables.
+
+```bash
+# Switch to dark color scheme
+chrome-devtools emulate --colorScheme dark
+
+# Wait for theme transition to settle
+chrome-devtools wait_for --event networkIdle --timeout 3000
+
+# Screenshot at desktop viewport (one viewport is enough for theme checks)
+chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-dark-${ROUTE_SLUG}.png"
+
+# Run the visual audit again in dark mode -- different issues surface
+chrome-devtools evaluate_script "<visual-audit.js content>"
+```
+
+Tag any dark-mode-specific findings with `[dark]` in the report. Common dark mode issues:
+- Text with hardcoded dark colors becoming invisible on dark backgrounds
+- Box shadows that look wrong (too harsh or invisible)
+- Images/icons without dark-mode variants blending into the background
+- Focus rings or outlines that lose contrast
+
+```bash
+# Restore light mode before moving to the next route
+chrome-devtools emulate --colorScheme light
+```
+
+Skip dark mode testing if the app has no dark mode support -- false positives from
+forcing dark scheme on a light-only app are not useful.
+
+### 6. UX Interaction QA
+
+#### 6a. Interactive Elements Audit
 
 Read `scripts/interactive-audit.js` and inject it:
 
@@ -225,7 +318,7 @@ The script scans all interactive elements (buttons, links, inputs, selects) and
 checks: visibility, accessible label, minimum touch target size, pointer-events
 not disabled, and tabindex reachability. It returns a categorized issue list.
 
-#### 5b. Interaction Spot-Checks
+#### 6b. Interaction Spot-Checks
 
 Pick 3-5 key interactive elements from the a11y snapshot (primary buttons,
 navigation links, form inputs) and verify they respond to interaction:
@@ -240,7 +333,7 @@ chrome-devtools hover "<uid>" --includeSnapshot true
 # Verify hover state appears (dropdown, tooltip, style change)
 ```
 
-#### 5c. Form Behavior (if forms exist)
+#### 6c. Form Behavior (if forms exist)
 
 If the page contains form elements, test basic form behavior:
 
@@ -254,9 +347,9 @@ chrome-devtools click "<submit_uid>" --includeSnapshot true
 # Verify validation messages appear
 ```
 
-### 6. Stop and Analyze Performance Trace
+### 7. Stop and Analyze Performance Trace
 
-The trace has been running since Step 4d, capturing visual audit script injection,
+The trace has been running since Step 5d, capturing visual audit script injection,
 console/network checks, clicks, hovers, and form fills -- the real interaction
 exercise without screenshot/Lighthouse noise. Stop and analyze it now:
 
@@ -277,11 +370,11 @@ Record findings with severity:
 - Long tasks 50-200ms or layout thrashing: warning
 - Minor paint issues: info
 
-### 7. E2E Smoke Test
+### 8. E2E Smoke Test
 
 Multi-step flow testing to verify pages work end-to-end.
 
-#### 7a. Navigation Flow
+#### 8a. Navigation Flow
 
 ```bash
 # Start from homepage
@@ -299,7 +392,7 @@ chrome-devtools take_snapshot --verbose true
 # Verify returned to previous page
 ```
 
-#### 7b. Key User Flows
+#### 8b. Key User Flows
 
 Identify the primary user flow from the route structure (e.g., homepage ->
 listing -> detail, or dashboard -> settings). Navigate through it:
@@ -320,7 +413,7 @@ At each step, verify:
 - Content is visible (snapshot shows meaningful content, not blank or stuck spinner)
 - Navigation is working (URL or content changed)
 
-#### 7c. State Persistence
+#### 8c. State Persistence
 
 Test that page state survives reload:
 
@@ -334,7 +427,7 @@ chrome-devtools take_snapshot --verbose true
 # Compare: did the state persist (URL params, visible selections)?
 ```
 
-### 8. Before/After Comparison
+### 9. Before/After Comparison
 
 Check if baseline screenshots exist:
 
@@ -356,7 +449,7 @@ If a baseline exists, compare current screenshots against it. For each pair:
 
 Include both screenshot paths in the report so the user can view them.
 
-### 9. Generate QA Report
+### 10. Generate QA Report
 
 Compile all findings into a report file. Read the format from
 [report-format.md](references/report-format.md).
@@ -419,4 +512,5 @@ summary to the user:
 | `lighthouse_audit` | Full Lighthouse run | |
 | `list_console_messages` | Console output | `--types error`, `--pageSize` |
 | `list_network_requests` | Network activity | |
+| `wait_for` | Wait for page event | `--event networkIdle`, `--timeout` |
 | `emulate` | Device/network emulation | CPU throttle, geolocation, color scheme |

@@ -3,11 +3,25 @@
 // Returns JSON array of visual issues found on the page.
 () => {
   const issues = [];
+  const seen = new Set();
+
+  // Deduplication helper: prevents nested elements from reporting the same issue
+  // multiple times. Uses issue type + element position as a fingerprint.
+  const dedupe = (issue) => {
+    const key = `${issue.type}:${Math.round(issue.rect?.x || 0)},${Math.round(issue.rect?.y || 0)},${Math.round(issue.rect?.width || 0)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  };
+
+  const pushIssue = (issue) => {
+    if (dedupe(issue)) issues.push(issue);
+  };
 
   // 1. Broken images (failed to load or zero dimensions)
   document.querySelectorAll('img').forEach((img) => {
     if (!img.complete || img.naturalWidth === 0) {
-      issues.push({
+      pushIssue({
         type: 'broken-image',
         severity: 'critical',
         element: img.tagName,
@@ -17,7 +31,7 @@
       });
     }
     if (!img.alt && !img.getAttribute('role')) {
-      issues.push({
+      pushIssue({
         type: 'missing-alt',
         severity: 'warning',
         element: img.tagName,
@@ -35,7 +49,7 @@
     if (el.scrollWidth > el.clientWidth + 2 && style.overflow !== 'hidden' && style.overflowX !== 'hidden') {
       // Only flag if the element has actual text content
       if (el.textContent.trim().length > 0 && el.clientWidth > 0) {
-        issues.push({
+        pushIssue({
           type: 'text-overflow',
           severity: 'warning',
           element: el.tagName,
@@ -57,7 +71,7 @@
     const style = getComputedStyle(el);
     if (style.display === 'none' || style.visibility === 'hidden') return;
     if (rect.right < 0 || rect.bottom < 0 || rect.left > vw || rect.top > vh) {
-      issues.push({
+      pushIssue({
         type: 'outside-viewport',
         severity: 'info',
         element: el.tagName,
@@ -70,7 +84,7 @@
 
   // 4. Horizontal scroll detection
   if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 5) {
-    issues.push({
+    pushIssue({
       type: 'horizontal-scroll',
       severity: 'warning',
       element: 'document',
@@ -89,7 +103,7 @@
     const hasBorder = parseInt(style.borderWidth) > 0;
     const hasVisualPresence = hasBackground || hasBorder;
     if (hasVisualPresence && el.textContent.trim().length === 0 && el.querySelectorAll('img, svg, video, canvas, iframe').length === 0) {
-      issues.push({
+      pushIssue({
         type: 'empty-container',
         severity: 'info',
         element: el.tagName,
@@ -101,11 +115,14 @@
   });
 
   // 6. Z-index stacking issues (very high z-index values)
-  document.querySelectorAll('*').forEach((el) => {
+  // Only check positioned elements -- z-index has no effect on static elements,
+  // so scanning everything wastes time on complex pages.
+  document.querySelectorAll('[style*="z-index"], [class]').forEach((el) => {
     const style = getComputedStyle(el);
+    if (style.position === 'static') return;
     const z = parseInt(style.zIndex);
     if (z > 10000) {
-      issues.push({
+      pushIssue({
         type: 'extreme-z-index',
         severity: 'info',
         element: el.tagName,
@@ -123,7 +140,7 @@
     if (el.textContent.trim().length === 0) return;
     const fontSize = parseFloat(style.fontSize);
     if (fontSize < 12 && fontSize > 0) {
-      issues.push({
+      pushIssue({
         type: 'small-text',
         severity: 'warning',
         element: el.tagName,

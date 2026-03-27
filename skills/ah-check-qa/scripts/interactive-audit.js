@@ -5,7 +5,21 @@
 // Returns JSON array of issues.
 () => {
   const issues = [];
+  const seen = new Set();
   const MIN_TOUCH_TARGET = 44; // WCAG 2.5.8 minimum
+
+  // Deduplication: nested interactive elements (e.g., <a> wrapping <button>)
+  // can trigger the same issue at the same position. Fingerprint by type + rect.
+  const dedupe = (issue) => {
+    const key = `${issue.type}:${Math.round(issue.rect?.x || 0)},${Math.round(issue.rect?.y || 0)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  };
+
+  const pushIssue = (issue) => {
+    if (dedupe(issue)) issues.push(issue);
+  };
 
   const interactiveSelectors = [
     'button',
@@ -27,7 +41,6 @@
 
   const elements = document.querySelectorAll(interactiveSelectors.join(', '));
   let totalChecked = 0;
-  let totalIssues = 0;
 
   elements.forEach((el) => {
     const style = getComputedStyle(el);
@@ -51,14 +64,13 @@
 
     // 1. Missing accessible label
     if (!label && el.tagName !== 'INPUT') {
-      issues.push({
+      pushIssue({
         type: 'missing-label',
         severity: 'critical',
         element: elementDesc,
         message: 'Interactive element has no accessible label',
         rect: rect.toJSON(),
       });
-      totalIssues++;
     }
 
     // For inputs, check for associated label or aria-label
@@ -68,39 +80,36 @@
         el.getAttribute('aria-label') ||
         el.getAttribute('aria-labelledby');
       if (!hasLabel) {
-        issues.push({
+        pushIssue({
           type: 'missing-input-label',
           severity: 'critical',
           element: elementDesc,
           message: 'Input has no associated label, aria-label, or aria-labelledby',
           rect: rect.toJSON(),
         });
-        totalIssues++;
       }
     }
 
     // 2. Touch target too small
     if (rect.width < MIN_TOUCH_TARGET || rect.height < MIN_TOUCH_TARGET) {
-      issues.push({
+      pushIssue({
         type: 'small-touch-target',
         severity: 'warning',
         element: elementDesc,
         message: `Touch target ${Math.round(rect.width)}x${Math.round(rect.height)}px is below ${MIN_TOUCH_TARGET}x${MIN_TOUCH_TARGET}px minimum`,
         rect: rect.toJSON(),
       });
-      totalIssues++;
     }
 
     // 3. Pointer events disabled
     if (style.pointerEvents === 'none') {
-      issues.push({
+      pushIssue({
         type: 'pointer-events-disabled',
         severity: 'critical',
         element: elementDesc,
         message: 'Interactive element has pointer-events: none',
         rect: rect.toJSON(),
       });
-      totalIssues++;
     }
 
     // 4. Element obscured by another element
@@ -109,28 +118,26 @@
     if (centerX >= 0 && centerY >= 0 && centerX <= document.documentElement.clientWidth && centerY <= document.documentElement.clientHeight) {
       const topEl = document.elementFromPoint(centerX, centerY);
       if (topEl && topEl !== el && !el.contains(topEl) && !topEl.contains(el)) {
-        issues.push({
+        pushIssue({
           type: 'obscured',
           severity: 'warning',
           element: elementDesc,
           message: `Element center is obscured by ${topEl.tagName.toLowerCase()}.${topEl.className?.split?.(' ')?.[0] || ''}`,
           rect: rect.toJSON(),
         });
-        totalIssues++;
       }
     }
 
     // 5. Disabled without visual indication
     if (el.disabled || el.getAttribute('aria-disabled') === 'true') {
       if (style.opacity > 0.8 && style.cursor !== 'not-allowed') {
-        issues.push({
+        pushIssue({
           type: 'disabled-no-visual',
           severity: 'info',
           element: elementDesc,
           message: 'Disabled element lacks clear visual indication (normal opacity, no not-allowed cursor)',
           rect: rect.toJSON(),
         });
-        totalIssues++;
       }
     }
 
@@ -138,14 +145,13 @@
     if (el.tagName === 'A') {
       const href = el.getAttribute('href');
       if (!href || href === '#' || href.startsWith('javascript:')) {
-        issues.push({
+        pushIssue({
           type: 'invalid-link',
           severity: 'warning',
           element: elementDesc,
           message: `Link has ${!href ? 'no href' : `href="${href}"`} -- should be a button if not a navigation link`,
           rect: rect.toJSON(),
         });
-        totalIssues++;
       }
     }
 
@@ -153,14 +159,13 @@
     if (el.tagName === 'BUTTON' && !el.getAttribute('type')) {
       const inForm = el.closest('form');
       if (inForm) {
-        issues.push({
+        pushIssue({
           type: 'button-no-type',
           severity: 'info',
           element: elementDesc,
           message: 'Button inside form has no type attribute (defaults to "submit")',
           rect: rect.toJSON(),
         });
-        totalIssues++;
       }
     }
   });
@@ -168,7 +173,7 @@
   return JSON.stringify({
     summary: {
       totalChecked,
-      totalIssues,
+      totalIssues: issues.length,
       bySeverity: {
         critical: issues.filter((i) => i.severity === 'critical').length,
         warning: issues.filter((i) => i.severity === 'warning').length,

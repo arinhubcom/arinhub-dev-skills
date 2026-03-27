@@ -9,7 +9,7 @@ Use this template when generating the final QA report.
 **URL:** {base-url}
 **Routes tested:** {count} ({comma-separated list})
 **Viewports:** Mobile (375x812), Tablet (768x1024), Desktop (1280x800)
-**Tools used:** chrome-devtools-cli, playwright-cli
+**Tools used:** chrome-devtools-cli
 
 ## Summary
 
@@ -119,9 +119,9 @@ Use this template when generating the final QA report.
 
 All screenshots saved to: {screenshots-directory}
 
-| Route | Mobile | Tablet | Desktop |
-|---|---|---|---|
-| {route} | {path} | {path} | {path} |
+| Route | Mobile | Tablet | Desktop | Dark |
+|---|---|---|---|---|
+| {route} | {path} | {path} | {path} | {path or N/A} |
 ```
 
 ## Severity Definitions
