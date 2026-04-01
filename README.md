@@ -1,4 +1,4 @@
-# ArinHub
+# ArinHub Dev Skills
 
 Collection of AI [agent skills](#agent-skills) for software development workflows, designed for use with [Claude Code](https://code.claude.com/docs).
 
