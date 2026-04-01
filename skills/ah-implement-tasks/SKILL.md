@@ -1,6 +1,6 @@
 ---
 name: ah-implement-tasks
-description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Validates prerequisites, detects the project's tech stack to load relevant best-practice context (React composition patterns, performance guidelines, component building), gathers live library documentation via context7, fetches dependency source via opensrc, then runs speckit.implement as a subagent with TDD, progress tracking, and commit-after-pass. Implementer subagents can search GitHub for real-world patterns via grep MCP, look up docs on-the-fly via context7, and visually verify UI work via chrome-devtools. Supports resume from interrupted runs, monorepo scoping, and automatic retry on incomplete passes. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
+description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Validates prerequisites, detects the project's tech stack to load relevant best-practice context (React composition patterns, performance guidelines, component building), gathers live library documentation via context7, fetches dependency source via npx opensrc, then runs speckit.implement as a subagent with TDD, progress tracking, and commit-after-pass. Implementer subagents can search GitHub for real-world patterns via grep MCP, look up docs on-the-fly via context7, and visually verify UI work via chrome-devtools. Supports resume from interrupted runs, monorepo scoping, and automatic retry on incomplete passes. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
 argument-hint: "optional: feature directory path, specific task IDs, skip phases, or additional instructions"
 ---
 
@@ -23,8 +23,8 @@ The following external tools are available to the orchestrator and implementer s
 | `context7` MCP | Fetches current, version-specific library documentation | During context loading (step 2) and inside implementer subagents when encountering unfamiliar or recently-changed APIs |
 | `grep` MCP | Searches across 1M+ public GitHub repos for code patterns | Inside implementer subagents when needing real-world usage examples, implementation patterns, or solutions to tricky problems |
 | `/chrome-devtools-cli` skill | Browser automation: screenshots, DOM inspection, Lighthouse audits | Inside implementer subagents for visual verification of UI implementations (frontend tasks only) |
-| `opensrc` CLI | Fetches npm package source code locally | During context loading (step 2) when tasks reference libraries where type definitions alone are insufficient |
-| `repomix` CLI | Packs codebase sections into AI-friendly format | During context loading (step 2) to give the implementer compact context of relevant source files |
+| `npx opensrc` | Fetches npm package source code locally | During context loading (step 2) when tasks reference libraries where type definitions alone are insufficient |
+| `npx repomix` | Packs codebase sections into AI-friendly format | During context loading (step 2) to give the implementer compact context of relevant source files |
 
 ## Input
 
@@ -147,13 +147,13 @@ Limit to **5 most task-relevant libraries**. Skip unresolvable libraries silentl
 
 #### 2c. Dependency source
 
-Scan `tasks.md` for tasks requiring deep integration with npm packages (extending internals, wrapping unexported utilities, working around undocumented behavior). Use `opensrc` to fetch those packages locally. The implementer subagent can then read the source directly.
+Scan `tasks.md` for tasks requiring deep integration with npm packages (extending internals, wrapping unexported utilities, working around undocumented behavior). Use `npx opensrc` to fetch those packages locally. The implementer subagent can then read the source directly.
 
 Skip if no tasks need source-level understanding. Limit to **3 packages**.
 
 #### 2d. Codebase context
 
-If `tasks.md` references many existing files (5+), use `repomix` to pack the relevant directories into a compressed file. Derive scope from file paths in `tasks.md` and `plan.md`. The implementer reads this at session start for a codebase overview.
+If `tasks.md` references many existing files (5+), use `npx repomix` to pack the relevant directories into a compressed file. Derive scope from file paths in `tasks.md` and `plan.md`. The implementer reads this at session start for a codebase overview.
 
 Skip if scope is narrow -- the implementer can read files directly.
 
@@ -164,8 +164,8 @@ Briefly confirm to the user which contexts will be loaded (one line per category
 ```text
 Skills: /vercel-composition-patterns, /vercel-react-best-practices, /building-components
 Docs: react-query (TanStack Query v5), zod (v3.23), tailwindcss (v4)
-Source: @tanstack/react-query (opensrc)
-Codebase: src/components/**, src/hooks/** (repomix, compressed)
+Source: @tanstack/react-query (npx opensrc)
+Codebase: src/components/**, src/hooks/** (npx repomix, compressed)
 ```
 
 Update `${PROGRESS_FILE}` Context Loading section with the full list of loaded contexts.
@@ -178,7 +178,7 @@ Spawn subagent **implementer** (Opus, ultrathink):
 - If `CONTEXT_SKILLS` is not empty, invoke each skill to load best-practice guidance
 - If `LIBRARY_DOCS` is not empty, include the fetched documentation summaries in the subagent prompt
 - If a repomix context file was generated, read it for codebase overview
-- If opensrc packages were fetched, mention their paths so the subagent can read source when needed
+- If `npx opensrc` packages were fetched, mention their paths so the subagent can read source when needed
 
 **Implementation phase**:
 - Run `/speckit.implement` with any user-provided arguments forwarded
@@ -239,8 +239,8 @@ Present a summary:
 [2] Load implementation context
     [2a] Best-practice skills
     [2b] Library docs (context7)
-    [2c] Dependency source (opensrc)        -- skip if not needed
-    [2d] Codebase context (repomix)         -- skip if scope is narrow
+    [2c] Dependency source (npx opensrc)    -- skip if not needed
+    [2d] Codebase context (npx repomix)     -- skip if scope is narrow
  |
  v
 [3] Subagent: load context + /speckit.implement (pass 1) --> commit
