@@ -4,6 +4,9 @@ Collection of AI [agent skills](#agent-skills) for software development workflow
 
 ## Development workflow for implementing a new feature or fixing a bug
 
+Run the whole pipeline below in one orchestrated pass with `/ah-workflow` (feature description, issue
+number, base branch), or run each step individually:
+
 ```sh
 # Create PRD and ADR files from description.
 - /ah-create-prd-adr
@@ -21,6 +24,8 @@ Collection of AI [agent skills](#agent-skills) for software development workflow
 - /ah-finalize-code
 ```
 
+> Or orchestrate all of the above in a single run with [`ah-workflow`](#how-to-use-ah-workflow).
+
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/en/download) with `npm` available
@@ -34,7 +39,7 @@ Collection of AI [agent skills](#agent-skills) for software development workflow
 ## Installation
 
 ```sh
-npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-workflow -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr
 ```
 
 ## Agent Skills
@@ -45,6 +50,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 
 | Skill                                                                                | Description                                                                                                                                           | Use when                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`ah-workflow`](skills/ah-workflow/SKILL.md)                                         | Orchestrate the full feature pipeline end-to-end -- sequentially launches subagents for PRD/ADR, tasks, implementation, QA, and finalization (PR), anchored by `/goal` with per-phase retry + escalation to avoid loops. | `"ah workflow"`, `"ah run workflow"`, `"ah full workflow"`                                                                                                                          |
 | [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file.     | `"ah review code"`, `"ah review code 123"`                                                                                                                                          |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                                   | `"ah submit code review 123"`                                                                                                                                                       |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                                | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
@@ -57,6 +63,39 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.      | `"ah resolve pr review"`                                                                                                                                                            |
 | [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools CLI -- finds timing races between framework DOM cleanup and React re-renders.           | `"ah fix dom flash"`                                                                                                                                                                |
 | [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.              | `"ah fix ui bug"`                                                                                                                                                                   |
+
+### How to Use `ah-workflow`
+
+Drive the entire feature pipeline from a single entry point. Provide a feature description, an issue
+number, and a base branch:
+
+```sh
+/ah-workflow add a dark mode toggle to settings, issue 42, base main
+# or
+ah workflow add a dark mode toggle to settings, issue 42, base main
+```
+
+The orchestrator sets a `/goal` completion condition (with a turn cap as a runaway guard), runs a
+dev-server preflight, then sequentially launches one subagent per phase. Each phase is guarded by
+retry + stuck-detection: after at most `max-retries` attempts (default 2) with no new commit or
+artifact change, it records the failure and escalates to you instead of looping. QA is a soft gate --
+it skips when no dev server is running and pauses for your decision on Critical findings.
+
+Optional directives: `dry-run` (plan only, launch nothing), `skip <phase>`, `max-retries N`, `resume`.
+
+#### Phases (subagents launched, in order)
+
+| # | Skill                                                                      | Produces                                                  |
+| - | -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 1 | [`ah-create-prd-adr`](skills/ah-create-prd-adr/SKILL.md)                   | PRD + ADR from the feature description                    |
+| 2 | [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                       | Feature branch + `specs/<branch>/` (spec, plan, tasks)    |
+| 3 | [`ah-implement-tasks`](skills/ah-implement-tasks/SKILL.md)                 | Implemented code with TDD, committed                      |
+| 4 | [`ah-check-qa`](skills/ah-check-qa/SKILL.md)                               | UI/UX QA report (soft gate; skipped if no dev server)     |
+| 5 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                     | Simplify, tests, docs, review, then the PR via `ah-create-pr` |
+| 6 | [`revise-claude-md`](https://github.com/anthropics/claude-code)            | CLAUDE.md updated with learnings from the session         |
+
+`ah-create-pr` is not a separate phase -- `ah-finalize-code` calls it at the end of phase 5. Phase 6
+uses the `claude-md-management:revise-claude-md` skill to capture learnings from the run.
 
 ### How to Use `ah-review-code`
 
