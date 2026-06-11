@@ -10,7 +10,7 @@ Execute the implementation plan from tasks.md with full orchestration: pre-valid
 
 ## Configuration
 
-- **Subagent defaults**: Opus with ultrathink effort for all subagents except `committer` (Sonnet).
+- **Subagent defaults**: Opus with low effort for all subagents except `committer` (Sonnet).
 - **Committer protocol**: After each implementation pass that produces changes, spawn subagent **committer** (Sonnet) to run `/commit`. If a pass produced no file changes, skip the commit.
 - **Fresh diff rule**: Each implementation subagent computes `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous passes.
 
@@ -172,7 +172,7 @@ Update `${PROGRESS_FILE}` Context Loading section with the full list of loaded c
 
 ### 3. Execute Implementation (Pass 1)
 
-Spawn subagent **implementer** (Opus, ultrathink):
+Spawn subagent **implementer** (Opus, low):
 
 **Context loading phase** (beginning of subagent session):
 - If `CONTEXT_SKILLS` is not empty, invoke each skill to load best-practice guidance
@@ -200,7 +200,7 @@ Read `${SPEC_DIR}/tasks.md` and check whether all tasks are marked `[X]`.
 
 1. Report which tasks are still open (task IDs and descriptions).
 2. **Diagnose blockers** before retrying blindly -- use the external tools from Configuration to gather context (docs, GitHub examples, screenshots, dependency source) and include the diagnosis in the retry prompt.
-3. Spawn subagent **implementer-pass-N** (Opus, ultrathink):
+3. Spawn subagent **implementer-pass-N** (Opus, low):
    - Load `CONTEXT_SKILLS` again (fresh context window needs them reloaded)
    - Include `LIBRARY_DOCS` and any new documentation gathered during diagnosis
    - Include specific diagnosis and hints for the failing tasks
@@ -262,7 +262,7 @@ Present a summary:
 
 ## Important Notes
 
-- Every subagent except `committer` runs on Opus with ultrathink. The `committer` runs on Sonnet and only creates a commit via `/commit`.
+- Every subagent except `committer` runs on Opus with low. The `committer` runs on Sonnet and only creates a commit via `/commit`.
 - The `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
 - **Resume support**: Re-running the skill detects an existing progress file and offers to resume from the last incomplete step. Completed steps and their commits are skipped.
 - **Duration tracking**: Each subagent records start/end timestamps and computes duration (e.g., `duration: 2m 34s`).

@@ -19,7 +19,7 @@ one completion goal without spinning forever on a phase that can't make progress
 
 ## Configuration
 
-- **Subagent defaults**: Opus with ultrathink effort for every phase subagent. Each phase subagent's
+- **Subagent defaults**: Opus with low effort for every phase subagent. Each phase subagent's
   job is simply to invoke the corresponding `ah-*` skill and report back the artifacts it produced.
 - **Phase skills don't need a committer here**: each `ah-*` phase skill (phases 1-5) already runs its
   own `committer` subagent internally, so this orchestrator does not commit on its own. The exception
@@ -130,7 +130,7 @@ Apply the same loop to each of the six phases, in order. For phase _k_:
 
 1. **Skip checks**: if the user asked to skip it, or it's already complete on resume, mark it and move
    on. For phase 4 specifically, if the preflight found no dev server, soft-skip it here.
-2. **Launch a subagent** (Opus, ultrathink) whose prompt is: "Invoke the skill `<ah-skill-for-phase-k>`
+2. **Launch a subagent** (Opus, low) whose prompt is: "Invoke the skill `<ah-skill-for-phase-k>`
    with these inputs: <inputs>. When done, report the exact artifact paths you produced and a one-line
    status." **Exception -- phase 6 runs in the main session, not a subagent** (see its bullet below).
    Pass the phase-specific inputs:

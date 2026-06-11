@@ -25,7 +25,7 @@ Supports two modes:
 ## Configuration
 
 - **Subagent model defaults**: Opus for all subagents except `committer`, which uses Sonnet
-- **Thinking mode**: ultrathink effort for all subagents
+- **Thinking mode**: low effort for all subagents
 
 ## Procedure
 
@@ -95,7 +95,7 @@ If `MODE=update`:
 
 Read `prd.md` at `${PRD_PATH}` and distill it into a prompt for the `/speckit.specify` command. The prompt should focus on **what** and **why** -- strip out tech stack details, implementation specifics, and architecture choices. Keep only the user-facing requirements, goals, motivation, and any relevant context that would be important for a specifier to know when writing the initial `spec.md`. The goal is to create a clear and concise prompt that captures the essence of the feature without prescribing how it should be implemented.
 
-Spawn subagent **specifier** (Opus, ultrathink):
+Spawn subagent **specifier** (Opus, low):
 
 - Provide `${PRD_PATH}` so the subagent can read the PRD file directly for additional context
 - Run `/speckit.specify` with the distilled prompt
@@ -123,7 +123,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 3. Verify Spec
 
-Spawn subagent **spec-verifier** (Opus, ultrathink):
+Spawn subagent **spec-verifier** (Opus, low):
 
 - Prompt: `Act as a Senior Code Reviewer. Analyze spec.md in ${SPEC_DIR} and identify errors, logical gaps, or inconsistencies. If the spec.md references refactoring or existing codebases, perform a comparative analysis to ensure functional parity and identify any missing requirements. Fix all issues you find.`
 - Update `${PROGRESS_FILE}` Spec Verifier section
@@ -156,7 +156,7 @@ Read `adr.md` at `${ADR_PATH}` and distill it into a prompt for the `/speckit.pl
 
 Also read AGENTS.md in the repo root to gather active technologies and recent changes. After generating the plan, update AGENTS.md with any new active technologies or recent changes discovered during planning.
 
-Spawn subagent **planner** (Opus, ultrathink):
+Spawn subagent **planner** (Opus, low):
 
 - Provide `${ADR_PATH}` so the subagent can read the ADR file directly for additional context
 - Run `/speckit.plan` with the distilled prompt
@@ -170,7 +170,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 9. Research
 
-Spawn subagent **researcher** (Opus, ultrathink):
+Spawn subagent **researcher** (Opus, low):
 
 - Prompt: `I want you to go through the implementation plan and implementation details in ${SPEC_DIR}, looking for areas that could benefit from additional research. For those areas that you identify that require further research, update the research document with additional details about the specific versions that we are going to be using in this application and spawn parallel research tasks to clarify any details using research from the web or context7 tool.`
 - Update `${PROGRESS_FILE}` Researcher section
@@ -183,13 +183,13 @@ Spawn subagent **committer** (Sonnet):
 
 ### 11. Complexity Check
 
-Spawn subagent **complexity-checker** (Opus, ultrathink):
+Spawn subagent **complexity-checker** (Opus, low):
 
 - Prompt: `Cross-check the details to see if there are any over-engineered pieces in folder ${SPEC_DIR}. Return a numbered list of all issues found with severity and recommended fix for each.`
 
 After the subagent returns, present its findings to the user yourself (not in a subagent) and **ask which issues to fix**. Wait for the user to respond before continuing.
 
-Once the user responds, spawn subagent **complexity-fixer** (Opus, ultrathink):
+Once the user responds, spawn subagent **complexity-fixer** (Opus, low):
 
 - Prompt: `Fix the following issues in ${SPEC_DIR}: <list of user-selected issues from complexity-checker findings>`
 - Update `${PROGRESS_FILE}` Complexity Checker section
@@ -202,14 +202,14 @@ Spawn subagent **committer** (Sonnet):
 
 ### 13. Generate Checklist
 
-Spawn subagent **checklist-generator** (Opus, ultrathink):
+Spawn subagent **checklist-generator** (Opus, low):
 
 - Run `/speckit.checklist` with prompt: `full breadth pre-implementation checklist, exclude the general spec-quality items already covered in requirements.md and focus only on domain-specific requirement gaps`
 - Update `${PROGRESS_FILE}` Checklist Generator section
 
 ### 14. Check Checklist
 
-Spawn subagent **checklist-checker** (Opus, ultrathink):
+Spawn subagent **checklist-checker** (Opus, low):
 
 - Prompt: `Read the checklist in ${SPEC_DIR}, and check off each item in the checklist if the feature spec meets the criteria. Leave it empty if it does not. Fix all gaps.`
 - Update `${PROGRESS_FILE}` Checklist Checker section
@@ -222,7 +222,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 16. Generate Tasks
 
-Spawn subagent **tasks-generator** (Opus, ultrathink):
+Spawn subagent **tasks-generator** (Opus, low):
 
 - Run `/speckit.tasks`
 - Update `${PROGRESS_FILE}` Tasks Generator section
@@ -235,7 +235,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 18. Analyze Tasks (Pass 1)
 
-Spawn subagent **tasks-analyzer** (Opus, ultrathink):
+Spawn subagent **tasks-analyzer** (Opus, low):
 
 - Run `/speckit.analyze` with prompt: `if there are any issues fix all`
 - Update `${PROGRESS_FILE}` Tasks Analyzer (pass 1) section
@@ -248,7 +248,7 @@ Spawn subagent **committer** (Sonnet):
 
 ### 20. Analyze Tasks (Pass 2)
 
-Spawn subagent **tasks-analyzer-2** (Opus, ultrathink):
+Spawn subagent **tasks-analyzer-2** (Opus, low):
 
 - Run `/speckit.analyze` with prompt: `if there are any issues fix all`
 - Update `${PROGRESS_FILE}` Tasks Analyzer (pass 2) section
@@ -351,7 +351,7 @@ Each arrow includes a `/commit` step (not shown for brevity).
 
 ## Important Notes
 
-- Every subagent except `committer` runs on Opus with ultrathink effort mode. The `committer` subagent runs on Sonnet.
+- Every subagent except `committer` runs on Opus with low effort mode. The `committer` subagent runs on Sonnet.
 - Steps 5 (clarify) and 11 (complexity check) require user interaction -- the workflow pauses and waits for user input before continuing.
 - The `${PROGRESS_FILE}` file serves as a running audit trail. Each subagent updates its section immediately after finishing, so you can always see what has been done and what remains.
 - All Spec Kit output files are saved to `specs/<NEW_BRANCH_NAME>/`.
