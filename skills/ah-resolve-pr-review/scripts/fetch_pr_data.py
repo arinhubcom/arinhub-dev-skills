@@ -3,10 +3,28 @@
 Fetch all PR data needed by the ah-resolve-pr-review skill.
 
 Collects PR metadata, diff, review threads (with resolution status),
-reviews, conversation comments, and linked issues -- all via `gh` CLI.
+reviews, conversation comments, and linked issues.
 
 Automatically detects the PR number from the current git branch,
 so no input arguments are required.
+
+Optimization
+------------
+Data collection is collapsed into a single combined GraphQL query plus a
+parallel `gh pr diff` call, instead of 8-10 sequential `gh` invocations:
+
+  1. gh pr view --json number,url   -> resolve owner/repo/number
+  2. gh api graphql (combined)      -> metadata, files, reviewThreads,
+                                       reviews, comments, and linked issues
+                                       with full detail inlined
+  3. gh pr diff <n>                 -> unified diff (not exposed via GraphQL)
+
+Steps 2 and 3 run concurrently. Pagination fires only on the connections
+whose `hasNextPage` is true, so typical PRs cost exactly two `gh` calls
+after ref resolution. The combined GraphQL query also draws from a single
+5000-points/hour budget instead of mixing the separate REST rate-limit pool.
+
+The output JSON shape is identical to the previous implementation.
 
 Requires:
   - `gh auth login` already set up
@@ -22,22 +40,39 @@ import json
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, cast
 
 
 # ---------------------------------------------------------------------------
-# GraphQL: review threads with resolution status (paginated)
+# Combined GraphQL query
 # ---------------------------------------------------------------------------
-REVIEW_THREADS_QUERY = """\
+# Three independent cursors let each connection paginate on its own. The first
+# page asks for `first: 100` everywhere; only connections whose
+# pageInfo.hasNextPage is true are refetched (see fetch_combined).
+COMBINED_QUERY = """\
 query(
   $owner: String!,
   $repo: String!,
   $number: Int!,
-  $cursor: String
+  $threadsCursor: String,
+  $reviewsCursor: String,
+  $commentsCursor: String
 ) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100, after: $cursor) {
+      number
+      title
+      body
+      url
+      state
+      baseRefName
+      headRefName
+      author { login }
+      files(first: 100) {
+        nodes { path additions deletions }
+      }
+      reviewThreads(first: 100, after: $threadsCursor) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id
@@ -67,27 +102,39 @@ query(
           }
         }
       }
-    }
-  }
-}
-"""
-
-# ---------------------------------------------------------------------------
-# GraphQL: linked (closing) issues
-# ---------------------------------------------------------------------------
-LINKED_ISSUES_QUERY = """\
-query(
-  $owner: String!,
-  $repo: String!,
-  $number: Int!
-) {
-  repository(owner: $owner, name: $repo) {
-    pullRequest(number: $number) {
+      reviews(first: 100, after: $reviewsCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          body
+          state
+          author { login }
+          submittedAt
+        }
+      }
+      comments(first: 100, after: $commentsCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          body
+          author { login }
+          createdAt
+        }
+      }
       closingIssuesReferences(first: 10) {
         nodes {
           number
           title
+          body
           url
+          labels(first: 20) { nodes { name } }
+          comments(first: 50) {
+            nodes {
+              body
+              author { login }
+              createdAt
+            }
+          }
         }
       }
     }
@@ -116,30 +163,6 @@ def _run_json(cmd: list[str], stdin: str | None = None) -> Any:
         ) from e
 
 
-def _run_optional(cmd: list[str], stdin: str | None = None) -> str | None:
-    """Run a command, returning None on failure instead of raising."""
-    p = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
-    if p.returncode != 0:
-        return None
-    return p.stdout
-
-
-# ---------------------------------------------------------------------------
-# Authentication check
-# ---------------------------------------------------------------------------
-def ensure_gh_authenticated() -> None:
-    try:
-        _run(["gh", "auth", "status"])
-    except RuntimeError:
-        print(
-            "run `gh auth login` to authenticate the GitHub CLI",
-            file=sys.stderr,
-        )
-        raise RuntimeError(
-            "gh auth status failed; run `gh auth login` to authenticate the GitHub CLI"
-        ) from None
-
-
 # ---------------------------------------------------------------------------
 # PR detection from current branch
 # ---------------------------------------------------------------------------
@@ -154,168 +177,86 @@ def get_current_pr_ref() -> tuple[str, str, int]:
     pr = _run_json(["gh", "pr", "view", "--json", "number,url"])
     url = pr["url"]  # e.g. https://github.com/octocat/Spoon-Knife/pull/123
     parts = url.rstrip("/").split("/")
-    owner = parts[-4]
-    repo = parts[-3]
-    number = int(pr["number"])
-    return owner, repo, number
+    return parts[-4], parts[-3], int(pr["number"])
 
 
 # ---------------------------------------------------------------------------
-# PR metadata (REST)
+# Combined GraphQL fetch with selective pagination
 # ---------------------------------------------------------------------------
-def fetch_pr_metadata(pr_number: int) -> dict[str, Any]:
-    return _run_json(
-        [
-            "gh", "pr", "view", str(pr_number),
-            "--json",
-            "number,title,body,baseRefName,headRefName,files,url,state",
-        ]
-    )
+def _gh_graphql(query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    cmd = ["gh", "api", "graphql", "-F", "query=@-"]
+    for key, val in variables.items():
+        if val is None:
+            continue
+        # `-F` lets gh infer the type (Int for number, String for cursors),
+        # which is what the GraphQL variables expect.
+        cmd += ["-F", f"{key}={val}"]
+    payload = _run_json(cmd, stdin=query)
+    if payload.get("errors"):
+        raise RuntimeError(
+            "GitHub GraphQL errors:\n" + json.dumps(payload["errors"], indent=2)
+        )
+    return payload["data"]["repository"]["pullRequest"]
+
+
+def _next_cursor(connection: dict[str, Any]) -> str | None:
+    info = connection["pageInfo"]
+    return info["endCursor"] if info["hasNextPage"] else None
+
+
+def fetch_combined(owner: str, repo: str, number: int) -> dict[str, Any]:
+    """Run the combined query, then paginate only the connections that need it."""
+    base_vars: dict[str, Any] = {"owner": owner, "repo": repo, "number": number}
+
+    pr = _gh_graphql(COMBINED_QUERY, base_vars)
+
+    threads = list(pr["reviewThreads"]["nodes"])
+    reviews = list(pr["reviews"]["nodes"])
+    comments = list(pr["comments"]["nodes"])
+
+    # None means "stop paginating this connection".
+    t_cursor = _next_cursor(pr["reviewThreads"])
+    r_cursor = _next_cursor(pr["reviews"])
+    c_cursor = _next_cursor(pr["comments"])
+
+    # Loop only while at least one connection still has pages. In practice this
+    # body almost never runs for typical PRs.
+    while t_cursor or r_cursor or c_cursor:
+        page = _gh_graphql(
+            COMBINED_QUERY,
+            {
+                **base_vars,
+                "threadsCursor": t_cursor,
+                "reviewsCursor": r_cursor,
+                "commentsCursor": c_cursor,
+            },
+        )
+        if t_cursor:
+            threads.extend(page["reviewThreads"]["nodes"])
+            t_cursor = _next_cursor(page["reviewThreads"])
+        if r_cursor:
+            reviews.extend(page["reviews"]["nodes"])
+            r_cursor = _next_cursor(page["reviews"])
+        if c_cursor:
+            comments.extend(page["comments"]["nodes"])
+            c_cursor = _next_cursor(page["comments"])
+
+    # Inject merged collections back so callers see fully-paginated data.
+    pr["reviewThreads"]["nodes"] = threads
+    pr["reviews"]["nodes"] = reviews
+    pr["comments"]["nodes"] = comments
+    return pr
 
 
 # ---------------------------------------------------------------------------
-# PR diff (REST)
+# PR diff (REST -- GraphQL doesn't expose a unified diff)
 # ---------------------------------------------------------------------------
 def fetch_pr_diff(pr_number: int) -> str:
     return _run(["gh", "pr", "diff", str(pr_number)])
 
 
 # ---------------------------------------------------------------------------
-# Review threads via GraphQL (paginated)
-# ---------------------------------------------------------------------------
-def _gh_graphql(
-    query: str,
-    owner: str,
-    repo: str,
-    number: int,
-    extra_vars: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    cmd = [
-        "gh", "api", "graphql",
-        "-F", "query=@-",
-        "-F", f"owner={owner}",
-        "-F", f"repo={repo}",
-        "-F", f"number={number}",
-    ]
-    for key, val in (extra_vars or {}).items():
-        cmd += ["-F", f"{key}={val}"]
-    return _run_json(cmd, stdin=query)
-
-
-def fetch_review_threads(
-    owner: str, repo: str, number: int
-) -> list[dict[str, Any]]:
-    threads: list[dict[str, Any]] = []
-    cursor: str | None = None
-
-    while True:
-        extra: dict[str, str] = {}
-        if cursor:
-            extra["cursor"] = cursor
-
-        payload = _gh_graphql(
-            REVIEW_THREADS_QUERY, owner, repo, number, extra_vars=extra
-        )
-
-        if payload.get("errors"):
-            raise RuntimeError(
-                f"GitHub GraphQL errors:\n{json.dumps(payload['errors'], indent=2)}"
-            )
-
-        rt = payload["data"]["repository"]["pullRequest"]["reviewThreads"]
-        threads.extend(rt.get("nodes") or [])
-
-        if rt["pageInfo"]["hasNextPage"]:
-            cursor = rt["pageInfo"]["endCursor"]
-        else:
-            break
-
-    return threads
-
-
-# ---------------------------------------------------------------------------
-# Paginated REST response parser
-# ---------------------------------------------------------------------------
-def _parse_paginated_array(text: str) -> list[Any]:
-    """Parse potentially concatenated JSON arrays from gh api --paginate.
-
-    gh outputs concatenated results which may be a single merged array or
-    multiple arrays separated by newlines. Handle both cases.
-    """
-    text = text.strip()
-    if not text:
-        return []
-    try:
-        result = json.loads(text)
-        return result if isinstance(result, list) else [result]
-    except json.JSONDecodeError:
-        decoder = json.JSONDecoder()
-        items: list[Any] = []
-        idx = 0
-        while idx < len(text):
-            remaining = text[idx:].lstrip()
-            if not remaining:
-                break
-            obj, end = decoder.raw_decode(remaining)
-            if isinstance(obj, list):
-                items.extend(obj)
-            else:
-                items.append(obj)
-            idx = len(text) - len(remaining) + end
-        return items
-
-
-# ---------------------------------------------------------------------------
-# Reviews (REST, paginated)
-# ---------------------------------------------------------------------------
-def fetch_reviews(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
-    out = _run(
-        [
-            "gh", "api",
-            f"repos/{owner}/{repo}/pulls/{number}/reviews",
-            "--paginate",
-        ]
-    )
-    return _parse_paginated_array(out)
-
-
-# ---------------------------------------------------------------------------
-# Issue comments / conversation comments (REST, paginated)
-# ---------------------------------------------------------------------------
-def fetch_conversation_comments(
-    owner: str, repo: str, number: int
-) -> list[dict[str, Any]]:
-    out = _run(
-        [
-            "gh", "api",
-            f"repos/{owner}/{repo}/issues/{number}/comments",
-            "--paginate",
-        ]
-    )
-    return _parse_paginated_array(out)
-
-
-# ---------------------------------------------------------------------------
-# Linked issues via GraphQL
-# ---------------------------------------------------------------------------
-def fetch_linked_issues(
-    owner: str, repo: str, number: int
-) -> list[dict[str, Any]]:
-    payload = _gh_graphql(LINKED_ISSUES_QUERY, owner, repo, number)
-
-    if payload.get("errors"):
-        raise RuntimeError(
-            f"GitHub GraphQL errors:\n{json.dumps(payload['errors'], indent=2)}"
-        )
-
-    return (
-        payload["data"]["repository"]["pullRequest"]
-        ["closingIssuesReferences"]["nodes"]
-    )
-
-
-# ---------------------------------------------------------------------------
-# Linked issue details (REST)
+# Linked issue details (REST) -- used by the body-parsing fallback only
 # ---------------------------------------------------------------------------
 def fetch_issue_details(
     owner: str, repo: str, issue_number: int
@@ -329,181 +270,169 @@ def fetch_issue_details(
 
 
 # ---------------------------------------------------------------------------
-# Fallback: extract issue refs from PR body
+# Body-parsing fallback for linked issues (regex only -- no API)
 # ---------------------------------------------------------------------------
 _CLOSING_KEYWORD = r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)"
-
-# Matches: fixes #123
-_CLOSING_HASH_PATTERN = re.compile(
-    rf"\b{_CLOSING_KEYWORD}\s+#(\d+)",
-    re.IGNORECASE,
-)
-
-# Matches: fixes https://github.com/owner/repo/issues/123
-_CLOSING_URL_PATTERN = re.compile(
+_CLOSING_HASH = re.compile(rf"\b{_CLOSING_KEYWORD}\s+#(\d+)", re.IGNORECASE)
+_CLOSING_URL = re.compile(
     rf"\b{_CLOSING_KEYWORD}\s+https?://github\.com/[^/]+/[^/]+/issues/(\d+)",
     re.IGNORECASE,
 )
 
-_ISSUE_REF_PATTERN = re.compile(r"#(\d+)")
 
-
-def extract_issue_numbers_from_body(body: str) -> list[int]:
-    """Extract issue numbers from closing keywords in the PR body."""
-    hash_matches = _CLOSING_HASH_PATTERN.findall(body)
-    url_matches = _CLOSING_URL_PATTERN.findall(body)
+def extract_closing_issue_numbers(body: str) -> list[int]:
+    """Extract unique issue numbers referenced by closing keywords in the body."""
     seen: set[int] = set()
-    result: list[int] = []
-    for m in (*hash_matches, *url_matches):
+    out: list[int] = []
+    for m in _CLOSING_HASH.findall(body) + _CLOSING_URL.findall(body):
         n = int(m)
         if n not in seen:
             seen.add(n)
-            result.append(n)
-    return result
-
-
-def extract_all_issue_refs_from_body(body: str) -> list[int]:
-    """Extract all unique #N references from the PR body."""
-    matches = _ISSUE_REF_PATTERN.findall(body)
-    seen: set[int] = set()
-    result: list[int] = []
-    for m in matches:
-        n = int(m)
-        if n not in seen:
-            seen.add(n)
-            result.append(n)
-    return result
-
-
-def verify_is_issue(owner: str, repo: str, number: int) -> bool:
-    """Check if a number refers to an issue (not a PR)."""
-    out = _run_optional(
-        ["gh", "api", f"repos/{owner}/{repo}/issues/{number}", "-q", ".pull_request"]
-    )
-    # If pull_request field is null/absent, it's a real issue
-    return out is not None and out.strip() in ("", "null")
+            out.append(n)
+    return out
 
 
 # ---------------------------------------------------------------------------
-# Collect linked issue details with fallback
+# Output normalization (keeps the original JSON shape)
 # ---------------------------------------------------------------------------
-def collect_linked_issues(
-    owner: str, repo: str, pr_number: int, pr_body: str
-) -> list[dict[str, Any]]:
-    """
-    Try GraphQL closingIssuesReferences first; fall back to body-parsing.
-    Returns full issue details for each linked issue found.
-    """
-    # Method A: GraphQL
-    linked = fetch_linked_issues(owner, repo, pr_number)
-    issue_numbers = [i["number"] for i in linked]
-
-    # Method B: Closing keywords in PR body
-    if not issue_numbers and pr_body:
-        issue_numbers = extract_issue_numbers_from_body(pr_body)
-
-    # Method C: Any #N reference in body, verified as issue
-    if not issue_numbers and pr_body:
-        candidates = extract_all_issue_refs_from_body(pr_body)
-        # Exclude the PR's own number
-        candidates = [n for n in candidates if n != pr_number]
-        issue_numbers = [
-            n for n in candidates
-            if verify_is_issue(owner, repo, n)
-        ]
-
-    # Fetch full details for each linked issue
-    issues: list[dict[str, Any]] = []
-    seen: set[int] = set()
-    for num in issue_numbers:
-        if num in seen:
-            continue
-        seen.add(num)
-        try:
-            detail = fetch_issue_details(owner, repo, num)
-            issues.append(detail)
-        except RuntimeError:
-            # Issue might be in a different repo or inaccessible
-            issues.append({"number": num, "error": "Could not fetch issue details"})
-
-    return issues
-
-
-# ---------------------------------------------------------------------------
-# Simplify review/comment payloads
-# ---------------------------------------------------------------------------
-def _get_login(user_field: Any) -> str:
-    if isinstance(user_field, dict):
-        user = cast(dict[str, Any], user_field)
-        return str(user.get("login", ""))
+def _login(node: Any) -> str:
+    if isinstance(node, dict):
+        d = cast(dict[str, Any], node)
+        return str(d.get("login", ""))
     return ""
 
 
-def simplify_review(review: dict[str, Any]) -> dict[str, Any]:
+def normalize_review(r: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": review.get("id"),
-        "body": review.get("body", ""),
-        "state": review.get("state", ""),
-        "user": _get_login(review.get("user")),
-        "submitted_at": review.get("submitted_at") or review.get("submittedAt", ""),
+        "id": r.get("id"),
+        "body": r.get("body", ""),
+        "state": r.get("state", ""),
+        "user": _login(r.get("author")),
+        "submitted_at": r.get("submittedAt", ""),
     }
 
 
-def simplify_comment(comment: dict[str, Any]) -> dict[str, Any]:
+def normalize_comment(c: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": comment.get("id"),
-        "body": comment.get("body", ""),
-        "user": _get_login(comment.get("user")),
-        "created_at": comment.get("created_at") or comment.get("createdAt", ""),
+        "id": c.get("id"),
+        "body": c.get("body", ""),
+        "user": _login(c.get("author")),
+        "created_at": c.get("createdAt", ""),
     }
+
+
+def normalize_linked_issue(i: dict[str, Any]) -> dict[str, Any]:
+    # Match the shape `gh issue view --json number,title,body,labels,comments`
+    # produced, so downstream consumers keep working.
+    return {
+        "number": i.get("number"),
+        "title": i.get("title", ""),
+        "body": i.get("body", ""),
+        "url": i.get("url", ""),
+        "labels": [
+            {"name": n.get("name", "")}
+            for n in (i.get("labels") or {}).get("nodes", [])
+        ],
+        "comments": [
+            {
+                "body": c.get("body", ""),
+                "author": {"login": _login(c.get("author"))},
+                "createdAt": c.get("createdAt", ""),
+            }
+            for c in (i.get("comments") or {}).get("nodes", [])
+        ],
+    }
+
+
+def collect_linked_issues(
+    owner: str, repo: str, pr_number: int, pr_body: str, graphql_nodes: list[Any]
+) -> list[dict[str, Any]]:
+    """
+    Prefer GitHub's canonical closingIssuesReferences (already inlined in the
+    combined query). Fall back to closing keywords in the PR body only when
+    GraphQL returns nothing, fetching full details for those few issues so the
+    linked_issues contract stays full-detail.
+    """
+    if graphql_nodes:
+        return [normalize_linked_issue(i) for i in graphql_nodes]
+
+    if not pr_body:
+        return []
+
+    issues: list[dict[str, Any]] = []
+    for num in extract_closing_issue_numbers(pr_body):
+        if num == pr_number:
+            continue
+        try:
+            issues.append(fetch_issue_details(owner, repo, num))
+        except RuntimeError:
+            issues.append({"number": num, "error": "Could not fetch issue details"})
+    return issues
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
-    ensure_gh_authenticated()
-
     owner, repo, pr_number = get_current_pr_ref()
     print(f"Fetching data for {owner}/{repo}#{pr_number} ...", file=sys.stderr)
 
-    # Fetch all data
-    metadata = fetch_pr_metadata(pr_number)
-    diff = fetch_pr_diff(pr_number)
-    review_threads = fetch_review_threads(owner, repo, pr_number)
-    reviews_raw = fetch_reviews(owner, repo, pr_number)
-    comments_raw = fetch_conversation_comments(owner, repo, pr_number)
+    # Fan out: the GraphQL bundle and the unified diff are independent, so run
+    # them concurrently to halve wall-clock time on typical PRs.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        pr_future = pool.submit(fetch_combined, owner, repo, pr_number)
+        diff_future = pool.submit(fetch_pr_diff, pr_number)
+        pr = pr_future.result()
+        diff = diff_future.result()
+
+    threads = pr["reviewThreads"]["nodes"]
+    reviews = pr["reviews"]["nodes"]
+    comments = pr["comments"]["nodes"]
+    linked_nodes = (pr.get("closingIssuesReferences") or {}).get("nodes") or []
+
     linked_issues = collect_linked_issues(
-        owner, repo, pr_number, metadata.get("body") or ""
+        owner, repo, pr_number, pr.get("body") or "", linked_nodes
     )
 
-    # Separate unresolved vs resolved threads
-    unresolved_threads = [t for t in review_threads if not t.get("isResolved")]
-    resolved_threads = [t for t in review_threads if t.get("isResolved")]
+    # The combined query returns each thread's comments as {nodes: [...]}, the
+    # shape downstream code reads. Guard against a bare-list shape just in case.
+    for t in threads:
+        if isinstance(t.get("comments"), list):
+            t["comments"] = {"nodes": t["comments"]}
+
+    unresolved_threads = [t for t in threads if not t.get("isResolved")]
+    resolved_threads = [t for t in threads if t.get("isResolved")]
 
     result: dict[str, Any] = {
         "pull_request": {
-            "number": metadata["number"],
-            "title": metadata["title"],
-            "body": metadata.get("body", ""),
-            "url": metadata["url"],
-            "state": metadata["state"],
-            "base_branch": metadata["baseRefName"],
-            "head_branch": metadata["headRefName"],
-            "files": metadata.get("files", []),
+            "number": pr["number"],
+            "title": pr["title"],
+            "body": pr.get("body", ""),
+            "url": pr["url"],
+            "state": pr["state"],
+            "base_branch": pr["baseRefName"],
+            "head_branch": pr["headRefName"],
+            "files": [
+                {
+                    "path": f.get("path", ""),
+                    "additions": f.get("additions", 0),
+                    "deletions": f.get("deletions", 0),
+                }
+                for f in (pr.get("files") or {}).get("nodes", [])
+            ],
             "owner": owner,
             "repo": repo,
         },
         "diff": diff,
         "review_threads": {
-            "total": len(review_threads),
+            "total": len(threads),
             "unresolved_count": len(unresolved_threads),
             "resolved_count": len(resolved_threads),
             "unresolved": unresolved_threads,
             "resolved": resolved_threads,
         },
-        "reviews": [simplify_review(r) for r in reviews_raw],
-        "conversation_comments": [simplify_comment(c) for c in comments_raw],
+        "reviews": [normalize_review(r) for r in reviews],
+        "conversation_comments": [normalize_comment(c) for c in comments],
         "linked_issues": linked_issues,
     }
 
