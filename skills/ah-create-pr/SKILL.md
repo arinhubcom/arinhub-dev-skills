@@ -62,10 +62,11 @@ git log "${MERGE_BASE}"..HEAD --no-decorate
 # Branch tracking status
 git status -sb
 
-# Check for existing open PR on this branch
-EXISTING_PR_NUMBER=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json number --jq '.[0].number')
-EXISTING_PR_URL=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json url --jq '.[0].url')
-EXISTING_PR_BASE=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json baseRefName --jq '.[0].baseRefName')
+# Check for existing open PR on this branch (single API call)
+EXISTING_PR=$(gh pr list --head "${CURRENT_BRANCH}" --state open --json number,url,baseRefName --jq '.[0]')
+EXISTING_PR_NUMBER=$(echo "${EXISTING_PR}" | jq -r '.number // empty')
+EXISTING_PR_URL=$(echo "${EXISTING_PR}" | jq -r '.url // empty')
+EXISTING_PR_BASE=$(echo "${EXISTING_PR}" | jq -r '.baseRefName // empty')
 ```
 
 If an open PR already exists for the current branch, the skill will update it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing.
