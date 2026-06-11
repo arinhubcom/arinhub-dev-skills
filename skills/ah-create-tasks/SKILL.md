@@ -1,7 +1,7 @@
 ---
 name: ah-create-tasks
 description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". This skill runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step. Also supports "update" mode (e.g., "ah create tasks update 001") which skips initial specify/verify steps, creates a new branch, and starts from clarify.
-argument-hint: "path to prd.md and adr.md files, optionally 'update <spec-number>' for update mode"
+argument-hint: "a feature name (derives default prd/adr paths) or explicit prd.md and adr.md paths, optionally 'update <spec-number>' for update mode"
 ---
 
 # Create Tasks from PRD and ADR
@@ -15,8 +15,9 @@ Supports two modes:
 
 ## Input
 
-- **prd.md path** (required): Path to the PRD file that describes the feature. If not provided by the user, ask before proceeding.
-- **adr.md path** (required): Path to the ADR (Architectural Decision Records) file that describes architectural decisions, constraints, and rationale. If not provided by the user, ask before proceeding.
+- **feature name** (optional): A kebab-case feature slug (e.g. `dark-mode-toggle`). When provided, the PRD and ADR paths default to the convention written by `ah-create-prd-adr`: `~/.agents/prds/prd-<repo>-<feature>.md` and `~/.agents/adrs/adr-<repo>-<feature>.md` (see Step 0). This lets the user pass just a feature name instead of two full paths.
+- **prd.md path** (required unless **feature name** is given): Path to the PRD file that describes the feature. If neither this nor a feature name is provided, ask before proceeding.
+- **adr.md path** (required unless **feature name** is given): Path to the ADR (Architectural Decision Records) file that describes architectural decisions, constraints, and rationale. If neither this nor a feature name is provided, ask before proceeding.
 - **issue number** (required): The GitHub issue number this feature relates to (e.g., `42`). If not provided by the user, ask before proceeding.
 - **mode** (optional): `update` to skip steps 1-4 and start from Clarify. Default is create (full pipeline).
 - **spec number** (required in update mode): The spec number (e.g., `001`). Used to construct the branch name.
@@ -41,9 +42,21 @@ Determine the **mode**:
 - If the user said "update" and provided a spec number, set `MODE=update` and store the spec number as `SPEC_NUMBER`.
 - Otherwise, set `MODE=create`.
 
-If the user did not provide **prd.md path**, **adr.md path**, or **issue number**, ask them for all missing values now (before any other work begins). In update mode, also ask for **spec number** if not provided. Store these values as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (in update mode) `SPEC_NUMBER`.
+Resolve `PRD_PATH` and `ADR_PATH`:
 
-Verify that `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either file does not exist, ask the user for the correct path.
+- If the user gave a **feature name** (and not explicit paths), derive the default paths using the `ah-create-prd-adr` naming convention:
+
+  ```bash
+  FEATURE="<feature-name-slug>"
+  PRD_PATH=~/.agents/prds/prd-${REPO_NAME}-${FEATURE}.md
+  ADR_PATH=~/.agents/adrs/adr-${REPO_NAME}-${FEATURE}.md
+  ```
+
+- If the user gave explicit paths, use those instead (they override the feature-name default).
+
+If the user provided neither explicit paths nor a feature name, and did not provide the **issue number**, ask for all missing values now (before any other work begins). In update mode, also ask for **spec number** if not provided. Store these values as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (in update mode) `SPEC_NUMBER`.
+
+Verify that `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either file does not exist, ask the user for the correct path or feature name.
 
 #### Update Mode Branch Setup
 

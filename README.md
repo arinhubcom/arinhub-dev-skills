@@ -48,7 +48,8 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file.     | `"ah review code"`, `"ah review code 123"`                                                                                                                                          |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                                   | `"ah submit code review 123"`                                                                                                                                                       |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                                | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
-| [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                                 | Create tasks from a PRD and ADR using the full Spec Kit pipeline with consistency analysis passes.                                                    | `"ah create tasks"`                                                                                                                                                                 |
+| [`ah-create-prd-adr`](skills/ah-create-prd-adr/SKILL.md)                             | Turn a feature description (in any language) into a paired PRD and ADR via a short discovery interview, ready to feed into `ah create tasks`.          | `"ah create prd adr"`, `"ah prd adr"`                                                                                                                                               |
+| [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                                 | Create tasks from a PRD and ADR (by feature name or explicit paths) using the full Spec Kit pipeline with consistency analysis passes.                | `"ah create tasks"`, `"ah create tasks dark-mode-toggle, issue 42"`                                                                                                                 |
 | [`ah-implement-tasks`](skills/ah-implement-tasks/SKILL.md)                           | Load React best practices context, then execute tasks from tasks.md phase-by-phase with TDD and automatic retry for incomplete tasks.                 | `"ah implement tasks"`                                                                                                                                                              |
 | [`ah-check-qa`](skills/ah-check-qa/SKILL.md)                                         | Run UI/UX quality checks with Chrome DevTools: visual inspection, Lighthouse audits, interaction testing, E2E smoke tests, and screenshot comparison. | `"ah check qa"`, `"ah check qa before"`, `"ah check qa http://localhost:3000"`                                                                                                      |
 | [`ah-create-pr`](skills/ah-create-pr/SKILL.md)                                       | Analyze the current branch, run quality checks, and create a well-structured GitHub PR with summary, changes, tests, and linked issues.               | `"ah create pr"`, `"ah pr"`                                                                                                                                                         |
@@ -111,7 +112,31 @@ npx skills update
 
 > **Note:** `pr-review-toolkit` is an official Claude Code plugin. Official plugins have automatic updates enabled by default.
 
+### How to Use `ah-create-prd-adr`
+
+Provide a feature description in any language. The skill runs a short discovery interview, then
+generates a PRD at `~/.agents/prds/prd-<repo>-<feature>.md` and an ADR at
+`~/.agents/adrs/adr-<repo>-<feature>.md` (the ADR uses the PRD as context):
+
+```sh
+/ah-create-prd-adr pridej dark mode prepinac do nastaveni
+# or
+ah create prd adr add a dark mode toggle to settings
+```
+
+The resulting PRD/ADR pair feeds directly into `/ah-create-tasks`.
+
 ### How to Use `ah-create-tasks`
+
+Pass a feature name to reuse the PRD/ADR paths written by `ah-create-prd-adr` (it derives `~/.agents/prds/prd-<repo>-<feature>.md` and `~/.agents/adrs/adr-<repo>-<feature>.md`):
+
+```sh
+/ah-create-tasks dark-mode-toggle, issue 42
+# or
+ah create tasks dark-mode-toggle, issue 42
+```
+
+Or pass explicit paths:
 
 ```sh
 /ah-create-tasks path/to/prd.md, path/to/adr.md, issue 42
