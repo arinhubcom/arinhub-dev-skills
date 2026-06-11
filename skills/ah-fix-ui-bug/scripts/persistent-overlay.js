@@ -15,8 +15,12 @@
  * position tracking while the MutationObserver catches attribute changes
  * synchronously -- together they cover both gradual drifts and instant jumps.
  *
+ * window.__stopOverlay() cancels the rAF loop, disconnects the MutationObserver,
+ * and removes the overlay element so nothing leaks once debugging is done.
+ *
  * @customize Change '.target-element' to match the element(s) being debugged.
  * @usage chrome-devtools evaluate_script "<content>"
+ * @global {Function} window.__stopOverlay - Tears down the overlay and observers.
  * @returns {string} Confirmation message.
  */
 () => {
@@ -37,6 +41,7 @@
     const r = el.getBoundingClientRect();
     prev.set(el, {t: Math.round(r.top), l: Math.round(r.left)});
   });
+  let rafId = 0;
   function check() {
     els.forEach(el => {
       const r = el.getBoundingClientRect();
@@ -48,14 +53,15 @@
       }
       prev.set(el, curr);
     });
-    requestAnimationFrame(check);
+    rafId = requestAnimationFrame(check);
   }
-  requestAnimationFrame(check);
+  rafId = requestAnimationFrame(check);
 
   // Mutation monitor
   const target = document.querySelector('.target-element');
+  let mo = null;
   if (target) {
-    const mo = new MutationObserver(muts => {
+    mo = new MutationObserver(muts => {
       for (const m of muts) {
         addLog('ATTR ' + m.attributeName + ' changed on ' + m.target.tagName);
       }
@@ -63,6 +69,12 @@
     mo.observe(target, {attributes: true, attributeOldValue: true});
   }
 
+  window.__stopOverlay = () => {
+    cancelAnimationFrame(rafId);
+    if (mo) mo.disconnect();
+    overlay.remove();
+  };
+
   addLog('Diagnostic overlay active - interact manually');
-  return 'Overlay installed';
+  return 'Overlay installed (call window.__stopOverlay() to stop)';
 }

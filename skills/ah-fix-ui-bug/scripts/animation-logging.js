@@ -16,7 +16,11 @@
  * The Web Animations API accepts two formats -- adjust the check if the code
  * uses array-of-objects format ([{transform: '...'}, {transform: '...'}]).
  *
+ * window.__restoreAnimate() puts the original HTMLElement.prototype.animate back,
+ * so the patch does not leak for the rest of the page lifetime once debugging ends.
+ *
  * @usage chrome-devtools evaluate_script "<content>"
+ * @global {Function} window.__restoreAnimate - Restores the original animate().
  * @returns {string} Confirmation message.
  */
 () => {
@@ -33,5 +37,6 @@
     }
     return orig.call(this, keyframes, options);
   };
-  return 'animate() patched';
+  window.__restoreAnimate = () => { HTMLElement.prototype.animate = orig; };
+  return 'animate() patched (call window.__restoreAnimate() to restore)';
 }

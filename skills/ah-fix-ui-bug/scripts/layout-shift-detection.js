@@ -14,14 +14,23 @@
  * The buffered:false flag ensures we only capture shifts that happen AFTER
  * injection, so the data reflects the interaction being debugged, not page load.
  *
+ * The observer is capped at MAX_SHIFTS entries and exposes window.__stopShifts()
+ * so monitoring can be torn down cleanly instead of leaking for the page lifetime.
+ *
  * @usage chrome-devtools evaluate_script "<content>"
- * @global {Array} window.__shifts - Collected layout shift entries.
+ * @global {Array} window.__shifts - Collected layout shift entries (capped).
+ * @global {Function} window.__stopShifts - Disconnects the observer.
  * @returns {string} Confirmation message.
  */
 () => {
+  const MAX_SHIFTS = 200;
   window.__shifts = [];
   const obs = new PerformanceObserver(list => {
     for (const e of list.getEntries()) {
+      if (window.__shifts.length >= MAX_SHIFTS) {
+        obs.disconnect();
+        return;
+      }
       window.__shifts.push({
         value: e.value,
         sources: e.sources?.map(s => ({
@@ -33,5 +42,6 @@
     }
   });
   obs.observe({type: 'layout-shift', buffered: false});
-  return 'PerformanceObserver installed';
+  window.__stopShifts = () => obs.disconnect();
+  return 'PerformanceObserver installed (call window.__stopShifts() to stop)';
 }

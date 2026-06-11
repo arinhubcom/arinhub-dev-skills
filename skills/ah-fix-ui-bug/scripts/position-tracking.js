@@ -14,12 +14,18 @@
  * A Map is used instead of a plain object because DOM elements can't reliably
  * serve as object keys (toString gives "[object HTMLDivElement]" for all divs).
  *
+ * The rAF loop stops automatically once MAX_ENTRIES position changes are logged,
+ * and window.__stopPosLog() cancels it on demand, so the loop does not run for
+ * the page lifetime once debugging is done.
+ *
  * @customize Change '.target-element' to match the element(s) being tracked.
  * @usage chrome-devtools evaluate_script "<content>"
- * @global {Array} window.__posLog - Position change entries with timestamps.
+ * @global {Array} window.__posLog - Position change entries with timestamps (capped).
+ * @global {Function} window.__stopPosLog - Cancels the rAF loop.
  * @returns {string} Confirmation with element count.
  */
 () => {
+  const MAX_ENTRIES = 500;
   const els = document.querySelectorAll('.target-element');
   window.__posLog = [];
   const prev = new Map();
@@ -27,6 +33,7 @@
     const r = el.getBoundingClientRect();
     prev.set(el, {t: Math.round(r.top), l: Math.round(r.left)});
   });
+  let rafId = 0;
   function check() {
     els.forEach(el => {
       const r = el.getBoundingClientRect();
@@ -40,8 +47,11 @@
       }
       prev.set(el, curr);
     });
-    requestAnimationFrame(check);
+    if (window.__posLog.length >= MAX_ENTRIES) return;
+    rafId = requestAnimationFrame(check);
   }
-  requestAnimationFrame(check);
-  return 'Position tracker installed on ' + els.length + ' elements';
+  rafId = requestAnimationFrame(check);
+  window.__stopPosLog = () => cancelAnimationFrame(rafId);
+  return 'Position tracker installed on ' + els.length +
+    ' elements (call window.__stopPosLog() to stop)';
 }

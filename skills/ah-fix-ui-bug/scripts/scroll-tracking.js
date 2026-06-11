@@ -16,20 +16,29 @@
  * Scroll deltas below 1px are filtered out to avoid noise from sub-pixel
  * rendering and smooth-scroll interpolation.
  *
+ * window.__stopScrollLog() removes every listener it added, and the log is capped
+ * at MAX_ENTRIES so it cannot grow without bound during long sessions.
+ *
  * @customize Change '.scroll-container' to match the scrollable element(s).
  * @usage chrome-devtools evaluate_script "<content>"
- * @global {Array} window.__scrollLog - Scroll position entries with timestamps.
+ * @global {Array} window.__scrollLog - Scroll position entries with timestamps (capped).
+ * @global {Function} window.__stopScrollLog - Removes all scroll listeners.
  * @returns {string} Confirmation message.
  */
 () => {
+  const MAX_ENTRIES = 500;
   window.__scrollLog = [];
+  const record = entry => {
+    if (window.__scrollLog.length >= MAX_ENTRIES) return;
+    window.__scrollLog.push(entry);
+  };
   let lastScrollY = window.scrollY;
   let lastScrollX = window.scrollX;
   const handler = () => {
     const dy = window.scrollY - lastScrollY;
     const dx = window.scrollX - lastScrollX;
     if (Math.abs(dy) > 1 || Math.abs(dx) > 1) {
-      window.__scrollLog.push({
+      record({
         time: performance.now(),
         scrollX: window.scrollX, scrollY: window.scrollY,
         deltaX: dx, deltaY: dy
@@ -39,14 +48,19 @@
     lastScrollX = window.scrollX;
   };
   window.addEventListener('scroll', handler, {passive: true});
+  const containerListeners = [];
   document.querySelectorAll('.scroll-container').forEach(el => {
-    el.addEventListener('scroll', () => {
-      window.__scrollLog.push({
-        time: performance.now(),
-        element: el.className?.substring(0, 60),
-        scrollTop: el.scrollTop, scrollLeft: el.scrollLeft
-      });
-    }, {passive: true});
+    const fn = () => record({
+      time: performance.now(),
+      element: el.className?.substring(0, 60),
+      scrollTop: el.scrollTop, scrollLeft: el.scrollLeft
+    });
+    el.addEventListener('scroll', fn, {passive: true});
+    containerListeners.push({el, fn});
   });
-  return 'Scroll tracker installed';
+  window.__stopScrollLog = () => {
+    window.removeEventListener('scroll', handler);
+    containerListeners.forEach(({el, fn}) => el.removeEventListener('scroll', fn));
+  };
+  return 'Scroll tracker installed (call window.__stopScrollLog() to stop)';
 }

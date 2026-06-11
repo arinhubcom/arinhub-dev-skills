@@ -84,9 +84,11 @@
   });
 
   // Check if XSS payloads were rendered as executable HTML
+  // Serialize the DOM once; innerHTML is O(DOM size) so avoid reading it twice.
+  const bodyHtml = document.body.innerHTML;
   const xssRendered =
-    document.body.innerHTML.includes('<script>alert') ||
-    document.body.innerHTML.includes('onerror=alert');
+    bodyHtml.includes('<script>alert') ||
+    bodyHtml.includes('onerror=alert');
 
   addTest(
     'xss-prevention',
@@ -315,10 +317,11 @@
     document.getElementById('app') ||
     document.getElementById('__next');
   const hasReactFiber = reactRoot && Object.keys(reactRoot).some((k) => k.startsWith('__react'));
+  const currentBodyHtml = document.body.innerHTML;
   const hasErrorBoundary =
     document.querySelector('[data-error-boundary]') ||
-    document.body.innerHTML.includes('error-boundary') ||
-    document.body.innerHTML.includes('ErrorBoundary');
+    currentBodyHtml.includes('error-boundary') ||
+    currentBodyHtml.includes('ErrorBoundary');
 
   addTest(
     'error-boundary-present',

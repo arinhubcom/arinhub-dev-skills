@@ -24,10 +24,13 @@
   return {
     width: s.width,
     containerType: s.containerType,
-    children: [...container.children].map(c => ({
-      class: c.className?.substring(0, 60),
-      display: getComputedStyle(c).display,
-      width: getComputedStyle(c).width
-    }))
+    children: [...container.children].map(c => {
+      const cs = getComputedStyle(c);
+      return {
+        class: c.className?.substring(0, 60),
+        display: cs.display,
+        width: cs.width
+      };
+    })
   };
 }
