@@ -51,17 +51,29 @@ If the subagent cannot find a linked issue (e.g., the PR body has no closing key
 
 ### 4. Fetch Existing Review Comments
 
-Retrieve all existing review comments to prevent duplication:
+Retrieve all existing review comments to prevent duplication. Use the
+`scripts/gh-summarize.sh` wrapper (resolve the path relative to this SKILL.md's
+directory) -- it projects each item to a few fields, truncates long bodies, and
+caps the item count so a busy PR does not flood context (the true total is
+printed to stderr):
 
 ```bash
-gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments --paginate --jq '.[] | {id, path, line, body, user: .user.login}'
+# Inline review comments (id, path, line, truncated body, user)
+<skill_dir>/scripts/gh-summarize.sh \
+  "repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments" \
+  '{id, path, line, body, user: .user.login}'
 ```
 
 Also fetch top-level review bodies:
 
 ```bash
-gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews --paginate --jq '.[] | {id, body, state, user: .user.login}'
+<skill_dir>/scripts/gh-summarize.sh \
+  "repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews" \
+  '{id, body, state, user: .user.login}'
 ```
+
+Each emitted line is one compact JSON object. For deduplication (Step 6) only the
+`path`/`line`/`body` of each existing comment matters.
 
 ### 5. Get Issue List
 
