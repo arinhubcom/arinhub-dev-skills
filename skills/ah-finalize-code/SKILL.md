@@ -10,8 +10,8 @@ Orchestrate the full pre-PR finalization workflow for the current branch. Specia
 
 ## Configuration
 
-- **Subagent defaults**: Opus with low effort for all subagents except `committer` (Sonnet).
-- **Committer protocol**: After each step that produces changes, spawn subagent **committer** (Sonnet) to run `/commit`. If a step was skipped or produced no file changes, skip the commit too. This applies to every step below and won't be repeated in each section.
+- **Subagent defaults**: Opus with low effort for all subagents.
+- **Committer protocol**: After each step that produces changes, spawn subagent **committer** (Opus, low) to run `/commit`. If a step was skipped or produced no file changes, skip the commit too. This applies to every step below and won't be repeated in each section.
 - **Fresh diff rule**: Each subagent that analyzes code must compute `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous steps.
 
 ## Skip Conditions
@@ -222,7 +222,7 @@ Present a summary:
 
 ## Important Notes
 
-- Every subagent except `committer` runs on Opus with low. The `committer` runs on Sonnet and only creates a commit via `/commit`.
+- Every subagent runs on Opus with low. The `committer` only creates a commit via `/commit`.
 - The `${PROGRESS_FILE}` is a running audit trail. Each subagent updates its section immediately after finishing.
 - **Resume support**: Re-running the skill detects an existing progress file and offers to resume from the last incomplete step. Completed steps and their commits are skipped.
 - **Duration tracking**: Each subagent records start/end timestamps and computes duration (e.g., `duration: 2m 34s`).

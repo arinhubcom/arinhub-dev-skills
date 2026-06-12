@@ -16,6 +16,10 @@ Submit a structured code review with line-specific comments to a GitHub pull req
   - Full URL: `https://github.com/owner/repo/pull/123`
 - **Review file path** (optional): Path to a review file produced by `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/code-review-pr-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
 
+## Configuration
+
+- **Subagent defaults**: Opus with low effort for all subagents.
+
 ## Procedure
 
 ### 1. Resolve PR Identifier
@@ -42,7 +46,7 @@ Check whether requirements coverage data is already available:
 
 1. **Review file provided**: If a review file path was given, check whether it contains a `## Requirements Coverage` section. If yes, extract the coverage percentage and summary — no further action needed.
 2. **Current chat session**: If no review file was provided, check the current chat session for output from a previous `ah-verify-requirements-coverage` invocation (sections starting with `## Requirements Coverage:`). If found, use that data — no further action needed.
-3. **No coverage data available**: If neither source contains requirements coverage, spawn a subagent to execute the `/ah-verify-requirements-coverage` skill:
+3. **No coverage data available**: If neither source contains requirements coverage, spawn a subagent (Opus, low) to execute the `/ah-verify-requirements-coverage` skill:
    - Pass the PR number resolved in Step 1.
    - If a linked issue number is known (e.g., from the review file or PR body), pass it as well.
    - Store the resulting coverage report for use when composing the main review comment in Step 8.

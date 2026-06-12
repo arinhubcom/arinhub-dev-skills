@@ -19,6 +19,7 @@ one completion goal without spinning forever on a phase that can't make progress
 
 ## Configuration
 
+- **Orchestrator model**: This `ah-workflow` orchestrator itself runs on Opus with low effort.
 - **Subagent defaults**: Opus with low effort for every phase subagent. Each phase subagent's
   job is simply to invoke the corresponding `ah-*` skill and report back the artifacts it produced.
 - **Phase skills don't need a committer here**: each `ah-*` phase skill (phases 1-5) already runs its

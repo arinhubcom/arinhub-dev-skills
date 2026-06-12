@@ -10,8 +10,8 @@ Execute the implementation plan from tasks.md with full orchestration: pre-valid
 
 ## Configuration
 
-- **Subagent defaults**: Opus with low effort for all subagents except `committer` (Sonnet).
-- **Committer protocol**: After each implementation pass that produces changes, spawn subagent **committer** (Sonnet) to run `/commit`. If a pass produced no file changes, skip the commit.
+- **Subagent defaults**: Opus with low effort for all subagents.
+- **Committer protocol**: After each implementation pass that produces changes, spawn subagent **committer** (Opus, low) to run `/commit`. If a pass produced no file changes, skip the commit.
 - **Fresh diff rule**: Each implementation subagent computes `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous passes.
 
 ### External Tools
@@ -188,7 +188,7 @@ Spawn subagent **implementer** (Opus, low):
 
 After the subagent completes, update `${PROGRESS_FILE}` Implementation Pass 1 section with tasks completed, tasks remaining, tools used, and any errors.
 
-Spawn subagent **committer** (Sonnet): Run `/commit`.
+Spawn subagent **committer** (Opus, low): Run `/commit`.
 
 ### 4. Verify and Retry
 
@@ -207,7 +207,7 @@ Read `${SPEC_DIR}/tasks.md` and check whether all tasks are marked `[X]`.
    - Run `/speckit.implement` -- it picks up uncompleted tasks automatically because only `[ ]` tasks remain
    - Same external tools available as in pass 1
 4. Update `${PROGRESS_FILE}` Implementation Pass N section.
-5. Spawn subagent **committer** (Sonnet): Run `/commit`.
+5. Spawn subagent **committer** (Opus, low): Run `/commit`.
 6. Re-read `tasks.md` -- if all complete, break out of retry loop.
 
 **If still incomplete after 3 passes**: Report the remaining tasks with their IDs and descriptions, and ask the user how to proceed:
@@ -262,7 +262,7 @@ Present a summary:
 
 ## Important Notes
 
-- Every subagent except `committer` runs on Opus with low. The `committer` runs on Sonnet and only creates a commit via `/commit`.
+- Every subagent runs on Opus with low. The `committer` only creates a commit via `/commit`.
 - The `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
 - **Resume support**: Re-running the skill detects an existing progress file and offers to resume from the last incomplete step. Completed steps and their commits are skipped.
 - **Duration tracking**: Each subagent records start/end timestamps and computes duration (e.g., `duration: 2m 34s`).

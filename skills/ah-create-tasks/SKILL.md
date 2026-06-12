@@ -24,7 +24,7 @@ Supports two modes:
 
 ## Configuration
 
-- **Subagent model defaults**: Opus for all subagents except `committer`, which uses Sonnet
+- **Subagent model defaults**: Opus for all subagents
 - **Thinking mode**: low effort for all subagents
 
 ## Procedure
@@ -117,7 +117,7 @@ Spawn subagent **specifier** (Opus, low):
 
 ### 2. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 3. Verify Spec
 
@@ -128,7 +128,7 @@ Spawn subagent **spec-verifier** (Opus, low):
 
 ### 4. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 5. Clarify
 
@@ -142,7 +142,7 @@ Update `${PROGRESS_FILE}` Clarifier section.
 
 ### 6. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 7. Plan
 
@@ -158,7 +158,7 @@ Spawn subagent **planner** (Opus, low):
 
 ### 8. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 9. Research
 
@@ -169,7 +169,7 @@ Spawn subagent **researcher** (Opus, low):
 
 ### 10. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 11. Complexity Check
 
@@ -186,7 +186,7 @@ Once the user responds, spawn subagent **complexity-fixer** (Opus, low):
 
 ### 12. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 13. Generate Checklist
 
@@ -204,7 +204,7 @@ Spawn subagent **checklist-checker** (Opus, low):
 
 ### 15. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 16. Generate Tasks
 
@@ -215,7 +215,7 @@ Spawn subagent **tasks-generator** (Opus, low):
 
 ### 17. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 18. Analyze Tasks (Pass 1)
 
@@ -226,7 +226,7 @@ Spawn subagent **tasks-analyzer** (Opus, low):
 
 ### 19. Commit
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 20. Analyze Tasks (Pass 2)
 
@@ -237,7 +237,7 @@ Spawn subagent **tasks-analyzer-2** (Opus, low):
 
 ### 21. Commit (Final)
 
-Spawn the **committer** subagent (Sonnet) to run `/commit`.
+Spawn the **committer** subagent (Opus, low) to run `/commit`.
 
 ### 22. Report to User
 
@@ -302,7 +302,7 @@ Each arrow includes a `/commit` step (not shown for brevity).
 
 ## Important Notes
 
-- Every subagent except `committer` runs on Opus with low effort mode. The `committer` subagent runs on Sonnet.
+- Every subagent runs on Opus with low effort mode.
 - Steps 5 (clarify) and 11 (complexity check) require user interaction -- the workflow pauses and waits for user input before continuing.
 - The `${PROGRESS_FILE}` file serves as a running audit trail. Each subagent updates its section immediately after finishing, so you can always see what has been done and what remains.
 - All Spec Kit output files are saved to `specs/<NEW_BRANCH_NAME>/`.

@@ -13,6 +13,10 @@ Orchestrate a comprehensive code review by running multiple review strategies in
 - **PR number or URL** (optional): Accepts `123`, `#123`, or full URL. If omitted, reviews local changes.
 - **Base branch** (optional, local mode only): The branch to diff against (e.g., `main`, `develop`). Auto-detected if not provided.
 
+## Configuration
+
+- **Subagent defaults**: Opus with low effort for all subagents.
+
 ## Procedure
 
 ### 0. Verify GitHub CLI Authentication
@@ -202,7 +206,7 @@ Every review subagent prompt must include:
 >
 > **Output:** Write your findings to `${SUBAGENT_FILE}` (your dedicated output file). Use the issue format specification embedded in your prompt above.
 
-**Delegation rule (applies to ALL subagents A–E):** Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
+**Delegation rule (applies to ALL subagents A–E):** Launch every subagent on Opus with low effort. Each subagent's sole job is to invoke its assigned skill and return whatever the skill produces. Do NOT perform the analysis yourself. Do NOT write review logic, diagnostic logic, or generate findings manually. Each skill contains its own methodology — delegate to it completely.
 
 **Worktree isolation for PR mode:** In `MODE=pr`, launch review subagents A–D with `isolation: "worktree"` so they get an isolated copy of the repo checked out to the PR branch. This avoids touching the user's working tree entirely — no stashing, no checkout, no risk of interrupted state. The worktree is cleaned up automatically when the subagent finishes. In `MODE=local`, do not use worktree isolation — the working tree already contains the changes.
 

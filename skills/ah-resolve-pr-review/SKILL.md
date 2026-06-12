@@ -197,7 +197,7 @@ Plan saved to: ${PLAN_FILE}
 
 #### 5b. Validate Plan
 
-Spawn a **plan-validator** subagent (Sonnet) with the following instructions:
+Spawn a **plan-validator** subagent (Opus, low) with the following instructions:
 
 1. Read the plan file at `${PLAN_FILE}`
 2. Collect relevant `AGENTS.md` files: for each file path referenced in the plan, walk up from that file's directory to the repository root, collecting any `AGENTS.md` found along the way. Deduplicate the results (the root `AGENTS.md` will appear for every path).
