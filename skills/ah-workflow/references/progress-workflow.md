@@ -47,22 +47,22 @@
 - artifacts: (QA report path)
 - findings: (severity summary; skipped if no dev server)
 
-## Phase 5 - ah-finalize-code [ ]
+## Phase 5 - revise-claude-md [ ]
+
+- status: not started
+- attempts: 0
+- started:
+- ended:
+- artifacts: (CLAUDE.md changes; committed onto the feature branch)
+- findings:
+
+## Phase 6 - ah-finalize-code [ ]
 
 - status: not started
 - attempts: 0
 - started:
 - ended:
 - artifacts: (PR URL; ah-create-pr runs inside this phase)
-- findings:
-
-## Phase 6 - revise-claude-md [ ]
-
-- status: not started
-- attempts: 0
-- started:
-- ended:
-- artifacts: (CLAUDE.md changes)
 - findings:
 
 ## Summary
