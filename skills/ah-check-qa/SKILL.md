@@ -485,20 +485,4 @@ summary to the user:
 
 ## Quick Reference
 
-| Command | Purpose | Key Flags |
-|---|---|---|
-| `navigate_page --url <url>` | Navigate to URL | `back`, `forward`, `reload` |
-| `take_snapshot` | A11y tree with UIDs | `--verbose true` |
-| `take_screenshot` | Visual capture | `--filePath`, `--fullPage true`, `--uid` |
-| `resize_page <w> <h>` | Change viewport | |
-| `evaluate_script "<fn>"` | Inject JS | `--args` |
-| `click "<uid>"` | Click element | `--includeSnapshot true`, `--dblClick true` |
-| `hover "<uid>"` | Hover element | `--includeSnapshot true` |
-| `fill "<uid>" "<value>"` | Fill form field | `--includeSnapshot true` |
-| `type_text "<text>"` | Type text | |
-| `press_key "<key>"` | Press keyboard key | |
-| `lighthouse_audit` | Full Lighthouse run | |
-| `list_console_messages` | Console output | `--types error`, `--pageSize` |
-| `list_network_requests` | Network activity | |
-| `wait_for` | Wait for page event | `--event networkIdle`, `--timeout` |
-| `emulate` | Device/network emulation | CPU throttle, geolocation, color scheme |
+For the full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.

@@ -382,17 +382,4 @@ Present findings and resolution:
 
 ## Quick Reference
 
-| Command                     | Purpose             | Key Flags                                   |
-| --------------------------- | ------------------- | ------------------------------------------- |
-| `navigate_page --url <url>` | Go to a URL         | `--timeout`                                 |
-| `take_snapshot`             | A11y tree with UIDs | `--verbose true`                            |
-| `take_screenshot`           | Visual capture      | `--filePath`, `--fullPage true`, `--uid`    |
-| `click "<uid>"`             | Click element       | `--includeSnapshot true`, `--dblClick true` |
-| `hover "<uid>"`             | Hover element       | `--includeSnapshot true`                    |
-| `drag "<src>" "<dst>"`      | Drag element        | `--includeSnapshot true`                    |
-| `evaluate_script "<fn>"`    | Run JS in page      | `--args`                                    |
-| `list_console_messages`     | List console logs   | `--pageSize`, `--types`                     |
-| `get_console_message <id>`  | Read one log entry  |                                             |
-| `resize_page <w> <h>`       | Change viewport     |                                             |
-| `performance_start_trace`   | Start perf trace    | `--filePath`                                |
-| `performance_stop_trace`    | Stop perf trace     | `--filePath`                                |
+For the full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.
