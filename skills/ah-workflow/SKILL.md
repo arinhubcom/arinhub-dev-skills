@@ -1,7 +1,7 @@
 ---
 name: ah-workflow
 description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", or "ah full workflow". Takes a feature description, an issue number, and a base branch, then sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-check-qa -> ah-finalize-code (which creates the PR) -> revise-claude-md. Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
-argument-hint: "a feature description, an issue number, a base branch (optional: dry-run, skip <phase>, max-retries N, resume)"
+argument-hint: "a feature description, an issue number, a base branch (optional: mode feature|update [default feature], spec number [required when mode=update], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
 ---
 
 # AH Workflow
@@ -52,6 +52,15 @@ and issue number into `spec.md`, so phases 3-5 read those themselves -- you don'
 through again. Subagents share the working directory, so the branch phase 2 creates stays checked out
 for every later phase.
 
+**Mode (feature vs update):** this orchestrator accepts an optional `mode` -- `feature`
+(default) or `update`. It only changes phase 2: in `update` mode the phase-2 subagent runs
+`ah-create-tasks` in *its* update mode (skip re-specify, start from clarify), which needs a
+`spec number` and a `branch prefix`. Everything else is identical -- phase 1
+(`ah-create-prd-adr`) still runs in both modes (update mode distills its clarify prompt from
+the PRD), and the base-branch checkout before phase 2 happens in both modes
+(`ah-create-tasks` reads the base from the current branch even in update mode). Default to
+`feature` when no mode is given, so existing behavior is unchanged.
+
 ## Procedure
 
 ### 0. Initialize
@@ -62,6 +71,10 @@ particular is never guessed (same rule as `ah-create-pr`), because it determines
 
 Parse optional directives:
 
+- `mode feature|update` -- which pipeline mode to run (default `feature`). In `update`
+  mode, also collect a `spec number` (e.g. `001`) and a `branch prefix` (e.g. `jj`); if
+  either is missing, ask for it now, before doing anything else -- update mode's phase 2
+  needs both and would otherwise stall mid-run.
 - `dry-run` -- plan only, run nothing (see "Dry run").
 - `skip <phase>` -- skip a named phase (e.g. `skip qa`). Mark it `skipped (user request)`.
 - `max-retries N` -- per-phase attempt cap (default 2).
@@ -142,7 +155,10 @@ Apply the same loop to each of the six phases, in order. For phase _k_:
      feature branch is cut from the right base -- `ah-create-tasks` reads the base from the current
      branch, it has no base-branch argument. Then pass the PRD path and ADR path captured from phase
      1's report, plus the issue number. (Passing the derived feature slug also works in place of the
-     two paths, per `ah-create-tasks`'s feature-name input.)
+     two paths, per `ah-create-tasks`'s feature-name input.) **In `update` mode**, additionally tell
+     the subagent to run `ah-create-tasks` in update mode -- i.e. include `update <spec-number>` and
+     the `branch prefix` (exported as `GIT_BRANCH_PREFIX`) in the inputs -- so it skips re-specify and
+     branches as `<prefix>/<spec>-<desc>`. In `feature` mode, pass nothing extra (the default).
    - Phases 3, 5: nothing extra -- the skill reads `spec.md`. Just name the spec dir if helpful.
    - Phase 4: the detected dev-server URL.
    - Phase 6: do **not** spawn a subagent. Invoke `claude-md-management:revise-claude-md` in the main
@@ -192,8 +208,9 @@ QA is a soft gate, not a hard stop:
 
 If `dry-run` was passed, do not launch any subagent. Instead print:
 
-- the resolved inputs (repo, issue number, base branch, derived feature slug -- 2-5 words,
-  lowercase, hyphen-separated, matching `ah-create-prd-adr`'s convention),
+- the resolved inputs (repo, issue number, base branch, mode -- and in update mode the
+  spec number and branch prefix -- plus the derived feature slug -- 2-5 words, lowercase,
+  hyphen-separated, matching `ah-create-prd-adr`'s convention),
 - the six phases in order with the input each will receive,
 - the target artifact paths (PRD, ADR, spec dir, QA report, progress file),
 - the dev-server preflight result.

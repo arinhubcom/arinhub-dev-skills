@@ -138,6 +138,16 @@ Run `/speckit.clarify` yourself (not as subagent -- this command may require use
 
 If clarification asks questions needing user input, **wait for the user to respond** before proceeding. Do not skip or auto-answer clarification questions.
 
+**Update mode only**: once `${SPEC_DIR}/spec.md` exists after clarify, prepend the same metadata block that create mode writes in Step 1 (it is otherwise never written in update mode, because Step 1 is skipped). Downstream phases (`ah-implement-tasks`, `ah-finalize-code`) read `Base Branch` and `Issue Number` from this block and will stop to ask the user if it is missing, so writing it here keeps an automated run from stalling. Prepend at the very top of `spec.md` (before existing content), using the values already in scope (`BASE_BRANCH` from Step 0, `ISSUE_NUMBER` from input):
+
+```
+**Base Branch**: <BASE_BRANCH>
+**Issue Number**: <ISSUE_NUMBER>
+**Input**: <the distilled clarify prompt>
+```
+
+Skip this prepend in create mode -- Step 1 already wrote the block there.
+
 Update `${PROGRESS_FILE}` Clarifier section.
 
 ### 6. Commit
