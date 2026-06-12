@@ -117,9 +117,7 @@ Spawn subagent **specifier** (Opus, low):
 
 ### 2. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 3. Verify Spec
 
@@ -130,9 +128,7 @@ Spawn subagent **spec-verifier** (Opus, low):
 
 ### 4. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 5. Clarify
 
@@ -146,9 +142,7 @@ Update `${PROGRESS_FILE}` Clarifier section.
 
 ### 6. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 7. Plan
 
@@ -164,9 +158,7 @@ Spawn subagent **planner** (Opus, low):
 
 ### 8. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 9. Research
 
@@ -177,9 +169,7 @@ Spawn subagent **researcher** (Opus, low):
 
 ### 10. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 11. Complexity Check
 
@@ -196,9 +186,7 @@ Once the user responds, spawn subagent **complexity-fixer** (Opus, low):
 
 ### 12. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 13. Generate Checklist
 
@@ -216,9 +204,7 @@ Spawn subagent **checklist-checker** (Opus, low):
 
 ### 15. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 16. Generate Tasks
 
@@ -229,9 +215,7 @@ Spawn subagent **tasks-generator** (Opus, low):
 
 ### 17. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 18. Analyze Tasks (Pass 1)
 
@@ -242,9 +226,7 @@ Spawn subagent **tasks-analyzer** (Opus, low):
 
 ### 19. Commit
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 20. Analyze Tasks (Pass 2)
 
@@ -255,9 +237,7 @@ Spawn subagent **tasks-analyzer-2** (Opus, low):
 
 ### 21. Commit (Final)
 
-Spawn subagent **committer** (Sonnet):
-
-- Run `/commit`
+Spawn the **committer** subagent (Sonnet) to run `/commit`.
 
 ### 22. Report to User
 
@@ -312,40 +292,11 @@ tasks.md (final)
 
 ### Update Mode
 
-```
-prd.md + adr.md + spec number
-  |        |
-  |   [0] create branch: ${GIT_BRANCH_PREFIX}/${SPEC_NUMBER}-${description}
-  |        |
-  |   [1-4] SKIPPED
-  |        |
-  v        |
-[5] /speckit.clarify (prompt distilled from prd.md) --> user Q&A --> updates spec.md
-  |        |
-  v        v
-[7] /speckit.plan --> plan.md, research.md, data-model.md (uses adr.md)
-  |
-  v
-[9] researcher --> updates research.md
-  |
-  v
-[11] complexity-checker --> user picks fixes
-  |
-  v
-[13-14] /speckit.checklist --> checklist-checker --> fixes gaps
-  |
-  v
-[16] /speckit.tasks --> tasks.md
-  |
-  v
-[18] /speckit.analyze (pass 1) --> fixes
-  |
-  v
-[20] /speckit.analyze (pass 2) --> fixes
-  |
-  v
-tasks.md (final)
-```
+Identical to Create Mode from `[5] /speckit.clarify` onward, with two changes at
+the start: step `[0]` creates the branch
+`${GIT_BRANCH_PREFIX}/${SPEC_NUMBER}-${description}`, and steps `[1-4]`
+(specify + spec-verifier) are **skipped** -- the clarify prompt is distilled from
+`prd.md` instead.
 
 Each arrow includes a `/commit` step (not shown for brevity).
 
