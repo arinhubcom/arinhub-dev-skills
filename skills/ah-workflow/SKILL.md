@@ -1,7 +1,7 @@
 ---
 name: ah-workflow
-description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", or "ah full workflow". Takes a feature description, an issue number, and a base branch, then sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-check-qa -> ah-finalize-code (which creates the PR) -> revise-claude-md. Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
-argument-hint: "a feature description, an issue number, a base branch (optional: mode feature|update [default feature], spec number [required when mode=update], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
+description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", "ah full workflow", or given a GitHub issue URL to take from issue to PR (e.g. "ah workflow https://github.com/org/repo/issues/42"). Takes either a feature description + an issue number + a base branch, OR a GitHub issue URL (it then resolves those inputs from the issue via references/resolve-gh-issue.md, auto-classifying the issue as a new feature or an update). Sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-check-qa -> ah-finalize-code (which creates the PR) -> revise-claude-md. Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature or a GitHub issue from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
+argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode feature|update [default feature], spec number [required when mode=update], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
 ---
 
 # AH Workflow
@@ -65,9 +65,20 @@ the PRD), and the base-branch checkout before phase 2 happens in both modes
 
 ### 0. Initialize
 
-Collect the three required inputs from the user's prompt: **feature description**, **issue number**,
-**base branch**. If any is missing, ask for it before doing anything else -- the base branch in
-particular is never guessed (same rule as `ah-create-pr`), because it determines where the PR targets.
+**Input fork -- issue URL vs. classic inputs.** First decide how the inputs arrive. If the
+prompt is, or contains, a GitHub issue URL (`https://github.com/<owner>/<repo>/issues/<n>`,
+or `issue <url>`, or a bare issue number with no feature description), read
+`references/resolve-gh-issue.md` and follow it **in this main session** (it may ask you for
+a base branch, spec number, or branch prefix). It returns the **feature description**,
+**issue number**, **base branch**, **mode**, and -- in update mode -- the **spec number**
+and **branch prefix**. Any value the user passed explicitly (base branch, `mode`, spec
+number, branch prefix) overrides what the issue implies; pass those overrides into the
+resolution. Then continue below with those values already in hand.
+
+Otherwise (classic invocation), collect the three required inputs from the user's prompt:
+**feature description**, **issue number**, **base branch**. If any is missing, ask for it
+before doing anything else -- the base branch in particular is never guessed (same rule as
+`ah-create-pr`), because it determines where the PR targets.
 
 Parse optional directives:
 

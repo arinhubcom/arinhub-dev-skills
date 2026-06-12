@@ -4,10 +4,9 @@ Collection of AI [agent skills](#agent-skills) for software development workflow
 
 ## Development workflow for implementing a new feature or fixing a bug
 
-Start from a GitHub issue link with `/ah-resolve-gh-issue` — it reads the issue, auto-detects
-whether it is a new feature or an update (bug fix / refactor), and runs the pipeline in the right mode.
-Or run the whole pipeline below in one orchestrated pass with `/ah-workflow` (feature description, issue
-number, base branch), or run each step individually:
+Run the whole pipeline below in one orchestrated pass with `/ah-workflow` — pass either a feature
+description + issue number + base branch, or just a **GitHub issue URL** (it reads the issue and
+auto-detects whether it is a new feature or an update). Or run each step individually:
 
 ```sh
 # Create PRD and ADR files from description.
@@ -41,7 +40,7 @@ number, base branch), or run each step individually:
 ## Installation
 
 ```sh
-npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-resolve-gh-issue -s ah-workflow -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-workflow -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr
 ```
 
 ## Agent Skills
@@ -52,8 +51,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 
 | Skill                                                                                | Description                                                                                                                                           | Use when                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ah-resolve-gh-issue`](skills/ah-resolve-gh-issue/SKILL.md)               | Resolve a GitHub issue end-to-end from its link -- reads the issue, derives the feature description and base branch, auto-classifies it as a new feature or an update (bug fix / refactor), then runs the full pipeline via `ah-workflow` in the right mode. | `"ah resolve gh issue"`, `"ah resolve github issue"`, `"ah resolve issue <url>"`                                                                                                    |
-| [`ah-workflow`](skills/ah-workflow/SKILL.md)                                         | Orchestrate the full feature pipeline end-to-end -- sequentially launches subagents for PRD/ADR, tasks, implementation, QA, and finalization (PR), anchored by `/goal` with per-phase retry + escalation to avoid loops. | `"ah workflow"`, `"ah run workflow"`, `"ah full workflow"`                                                                                                                          |
+| [`ah-workflow`](skills/ah-workflow/SKILL.md)                                         | Orchestrate the full feature pipeline end-to-end from a feature description or a **GitHub issue URL** (auto-classifies feature vs update) -- sequentially launches subagents for PRD/ADR, tasks, implementation, QA, and finalization (PR), anchored by `/goal` with per-phase retry + escalation to avoid loops. | `"ah workflow"`, `"ah run workflow"`, `"ah full workflow"`, `"ah workflow <issue-url>"`                                                                                              |
 | [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file.     | `"ah review code"`, `"ah review code 123"`                                                                                                                                          |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                                   | `"ah submit code review 123"`                                                                                                                                                       |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                                | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
@@ -67,25 +65,6 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools CLI -- finds timing races between framework DOM cleanup and React re-renders.           | `"ah fix dom flash"`                                                                                                                                                                |
 | [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.              | `"ah fix ui bug"`                                                                                                                                                                   |
 
-### How to Use `ah-resolve-gh-issue`
-
-Start from a GitHub issue link (or number) and let the skill figure out the rest:
-
-```sh
-/ah-resolve-gh-issue https://github.com/owner/repo/issues/42
-# or
-ah resolve issue 42
-```
-
-It reads the issue with `gh`, builds the feature description from the title and body, and resolves the
-base branch in order: an explicit argument, then a `Base Branch:` marker line in the issue body, then
-the repo default branch. It classifies the issue labels-first (`bug`/`fix`/`refactor` -> update mode;
-`feature`/`enhancement` -> feature mode), falling back to title/body intent, and echoes the decision
-with its evidence before launching. In update mode it also resolves a spec number (from a
-`Spec Number:` marker, else it asks) and a branch prefix, so the run doesn't stall mid-pipeline. It
-then hands off to `/ah-workflow` with the chosen mode. Pass `base <branch>`, `mode feature|update`, or
-`dry-run` to override or preview.
-
 ### How to Use `ah-workflow`
 
 Drive the entire feature pipeline from a single entry point. Provide a feature description, an issue
@@ -96,6 +75,21 @@ number, and a base branch:
 # or
 ah workflow add a dark mode toggle to settings, issue 42, base main
 ```
+
+Or just pass a **GitHub issue URL** (or number) and let the workflow resolve the rest:
+
+```sh
+/ah-workflow https://github.com/owner/repo/issues/42
+```
+
+When the input is an issue URL, `ah-workflow` reads the issue with `gh` (per
+[`references/resolve-gh-issue.md`](skills/ah-workflow/references/resolve-gh-issue.md)): it builds the
+feature description from the title and body, resolves the base branch (explicit argument, then a
+`Base Branch:` marker in the body, then the repo default), and classifies the issue labels-first
+(`bug`/`fix`/`refactor` -> update mode; `feature`/`enhancement` -> feature mode) with a title/body
+fallback, echoing the decision and its evidence before launching. In update mode it also resolves a
+spec number (`Spec Number:` marker, else it asks) and a branch prefix. Explicit `base <branch>` /
+`mode feature|update` / `spec <NNN>` overrides win over what the issue implies.
 
 The orchestrator sets a `/goal` completion condition (with a turn cap as a runaway guard), runs a
 dev-server preflight, then sequentially launches one subagent per phase. Each phase is guarded by
