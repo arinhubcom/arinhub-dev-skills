@@ -11,7 +11,7 @@ Orchestrate the full pre-PR finalization workflow for the current branch. Specia
 ## Configuration
 
 - **Subagent defaults**: Opus with low effort for all subagents.
-- **Committer protocol**: After each step that produces changes, spawn subagent **committer** (Opus, low) to run `/commit`. If a step was skipped or produced no file changes, skip the commit too. This applies to every step below and won't be repeated in each section.
+- **Committer protocol**: After each step that produces changes, spawn subagent **committer** (Opus, low) to run `/commit`. If a step was skipped or produced no file changes, skip the commit too. Applies to every step below; not repeated in each section.
 - **Fresh diff rule**: Each subagent that analyzes code must compute `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous steps.
 
 ## Skip Conditions
@@ -155,7 +155,7 @@ Spawn both subagents **in parallel** -- they operate on completely independent f
 
 #### 5b: spec-finalizer
 
-This step consolidates the spec directory (removing consumed planning artifacts) and then updates the remaining essential files to reflect the actual implementation. These two phases are combined into one subagent because they both operate on `${SPEC_DIR}/` and the update phase depends on the consolidation phase completing first.
+This step consolidates the spec directory (removing consumed planning artifacts), then updates the remaining essential files to reflect the actual implementation. Combined into one subagent because both phases operate on `${SPEC_DIR}/` and the update phase depends on the consolidation phase completing first.
 
 - Get fresh diff, then read the prompt from `references/spec-finalizer-prompt.md` (substituting `${SPEC_DIR}` with the actual path) and execute it
 - Update `${PROGRESS_FILE}` Spec Finalizer section
@@ -169,7 +169,7 @@ Spawn subagent **code-reviewer**:
 - Run `/ah-review-code` with prompt: `base branch is ${BASE_BRANCH}, after code review read the code review file and fix all issues you find, then check "pnpm preflight"`
 - Update `${PROGRESS_FILE}` Code Reviewer section
 
-This step runs last (before PR creation) so it reviews everything -- code, docs, and spec changes from all previous steps.
+Runs last (before PR creation) so it reviews everything -- code, docs, and spec changes from all previous steps.
 
 ### 7. Create PR
 

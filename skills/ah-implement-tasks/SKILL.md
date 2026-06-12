@@ -6,31 +6,31 @@ argument-hint: "optional: feature directory path, specific task IDs, skip phases
 
 # Implement Tasks
 
-Execute the implementation plan from tasks.md with full orchestration: pre-validation, tech-stack-aware best-practice context loading, external documentation and source gathering, subagent-driven implementation with commits after each pass, automatic retry, and progress tracking.
+Execute tasks.md implementation plan with full orchestration: pre-validation, tech-stack-aware best-practice context loading, external doc/source gathering, subagent-driven implementation, commit after each pass, automatic retry, progress tracking.
 
 ## Configuration
 
-- **Subagent defaults**: Opus with low effort for all subagents.
-- **Committer protocol**: After each implementation pass that produces changes, spawn subagent **committer** (Opus, low) to run `/commit`. If a pass produced no file changes, skip the commit.
-- **Fresh diff rule**: Each implementation subagent computes `git diff "${MERGE_BASE}"` before starting, so it always sees the latest state including commits from previous passes.
+- **Subagent defaults**: Opus, low effort, all subagents.
+- **Committer protocol**: After each implementation pass producing changes, spawn subagent **committer** (Opus, low) to run `/commit`. Pass produced no file changes: skip commit.
+- **Fresh diff rule**: Each implementation subagent computes `git diff "${MERGE_BASE}"` before starting, so it sees latest state including prior-pass commits.
 
 ### External Tools
 
-The following external tools are available to the orchestrator and implementer subagents. Use them when the situation calls for it -- they are not mandatory for every run.
+Tools below available to orchestrator and implementer subagents. Use when situation calls for it -- not mandatory every run.
 
 | Tool | What It Does | When to Use |
 |------|-------------|-------------|
-| `context7` MCP | Fetches current, version-specific library documentation | During context loading (step 2) and inside implementer subagents when encountering unfamiliar or recently-changed APIs |
-| `grep` MCP | Searches across 1M+ public GitHub repos for code patterns | Inside implementer subagents when needing real-world usage examples, implementation patterns, or solutions to tricky problems |
+| `context7` MCP | Fetches current, version-specific library documentation | During context loading (step 2) and inside implementer subagents on unfamiliar or recently-changed APIs |
+| `grep` MCP | Searches 1M+ public GitHub repos for code patterns | Inside implementer subagents needing real-world usage, implementation patterns, solutions to tricky problems |
 | `/chrome-devtools-cli` skill | Browser automation: screenshots, DOM inspection, Lighthouse audits | Inside implementer subagents for visual verification of UI implementations (frontend tasks only) |
-| `npx opensrc` | Fetches npm package source code locally | During context loading (step 2) when tasks reference libraries where type definitions alone are insufficient |
-| `npx repomix` | Packs codebase sections into AI-friendly format | During context loading (step 2) to give the implementer compact context of relevant source files |
+| `npx opensrc` | Fetches npm package source code locally | During context loading (step 2) when tasks reference libraries where type definitions alone insufficient |
+| `npx repomix` | Packs codebase sections into AI-friendly format | During context loading (step 2) to give implementer compact context of relevant source files |
 
 ## Input
 
-- **feature directory** (optional): Path to the feature's spec directory containing tasks.md. If omitted, auto-detected via the prerequisites script.
-- **additional instructions** (optional): Extra guidance to forward to `/speckit.implement` (e.g., specific task IDs, phases to focus on).
-- **skip directives** (optional): `skip context` to skip best-practice and documentation loading, `skip checklists` to skip checklist verification.
+- **feature directory** (optional): Path to feature's spec directory containing tasks.md. If omitted, auto-detected via prerequisites script.
+- **additional instructions** (optional): Extra guidance forwarded to `/speckit.implement` (e.g., specific task IDs, phases to focus on).
+- **skip directives** (optional): `skip context` skips best-practice and documentation loading, `skip checklists` skips checklist verification.
 
 ## Procedure
 
@@ -53,20 +53,20 @@ mkdir -p "${PROGRESS_DIR}"
 
 2. **Spec exists**: Verify `${SPEC_DIR}/spec.md` exists. If missing, stop: "No spec.md found. The spec directory may be incomplete."
 
-3. **No uncommitted changes**: Run `git status --porcelain`. If there are uncommitted changes, ask the user whether to stash, commit first, or abort.
+3. **No uncommitted changes**: Run `git status --porcelain`. If uncommitted changes exist, ask user: stash, commit first, or abort.
 
 #### Extract metadata
 
-Read `${SPEC_DIR}/spec.md` and extract:
+Read `${SPEC_DIR}/spec.md`, extract:
 
-- `BASE_BRANCH` from the **Base Branch** metadata field
-- `ISSUE_NUMBER` from the **Issue Number** metadata field
+- `BASE_BRANCH` from **Base Branch** metadata field
+- `ISSUE_NUMBER` from **Issue Number** metadata field
 
-If either is missing, ask the user before proceeding.
+If either missing, ask the user before proceeding.
 
 #### Detect tech stack
 
-Read `${SPEC_DIR}/plan.md` (and `package.json` if it exists) to determine the project's tech stack:
+Read `${SPEC_DIR}/plan.md` (and `package.json` if it exists) to determine tech stack:
 
 | Stack | Indicators |
 |-------|-----------|
@@ -76,22 +76,22 @@ Read `${SPEC_DIR}/plan.md` (and `package.json` if it exists) to determine the pr
 | Angular | `@angular/core` in dependencies |
 | Non-frontend | No frontend framework detected |
 
-Store the detected stack as `TECH_STACK` for step 2.
+Store detected stack as `TECH_STACK` for step 2.
 
-Also extract `KEY_LIBRARIES` -- the primary libraries referenced in `tasks.md` and `plan.md` (e.g., `react-query`, `zod`, `drizzle-orm`, `tailwindcss`). These are used in step 2 for documentation fetching.
+Also extract `KEY_LIBRARIES` -- primary libraries referenced in `tasks.md` and `plan.md` (e.g., `react-query`, `zod`, `drizzle-orm`, `tailwindcss`). Used in step 2 for documentation fetching.
 
 #### Monorepo detection
 
-If the repository is a monorepo (multiple `package.json` files, workspace configuration in root `package.json`, or monorepo tools like turborepo/nx), identify the target application from the changed file paths or tasks.md references. Scope all commands (test, lint, build) to that application.
+If repo is a monorepo (multiple `package.json` files, workspace config in root `package.json`, or monorepo tools like turborepo/nx), identify target application from changed file paths or tasks.md references. Scope all commands (test, lint, build) to that application.
 
 #### Initialize progress file
 
-Read the template from `references/progress-implement.md`, replace all `<BRANCH_NAME>`, `<BASE_BRANCH>`, `<ISSUE_NUMBER>`, `<TECH_STACK>`, and `<TIMESTAMP>` placeholders with actual values, and write to `${PROGRESS_FILE}`.
+Read template from `references/progress-implement.md`, replace all `<BRANCH_NAME>`, `<BASE_BRANCH>`, `<ISSUE_NUMBER>`, `<TECH_STACK>`, `<TIMESTAMP>` placeholders with actual values, write to `${PROGRESS_FILE}`.
 
 If `${PROGRESS_FILE}` already exists:
 
-- **Resume**: If some steps are completed, show progress and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
-- **Restart**: Overwrite with a fresh template.
+- **Resume**: If some steps completed, show progress and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
+- **Restart**: Overwrite with fresh template.
 
 #### Compute merge base
 
@@ -106,8 +106,8 @@ Skip if user specified `skip checklists`.
 
 If `${SPEC_DIR}/checklists/` exists, scan all checklist files:
 
-- Count total, completed (`[X]`/`[x]`), and incomplete (`[ ]`) items per file
-- Display a status table:
+- Count total, completed (`[X]`/`[x]`), incomplete (`[ ]`) items per file
+- Display status table:
 
   ```text
   | Checklist   | Total | Done | Remaining | Status |
@@ -116,7 +116,7 @@ If `${SPEC_DIR}/checklists/` exists, scan all checklist files:
   | test.md     | 8     | 5    | 3         | FAIL   |
   ```
 
-- **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If the user declines, halt execution.
+- **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If user declines, halt execution.
 - **If all complete or no checklists directory**: Proceed automatically.
 
 Update `${PROGRESS_FILE}` Checklists section.
@@ -125,11 +125,11 @@ Update `${PROGRESS_FILE}` Checklists section.
 
 Skip if user specified `skip context`.
 
-This step gathers three categories of context that the implementer subagents will use: best-practice skills, live library documentation, and codebase context.
+Gathers three context categories implementer subagents use: best-practice skills, live library documentation, codebase context.
 
 #### 2a. Best-practice skills
 
-Based on `TECH_STACK` detected in step 0, determine which skills the implementation subagent should load:
+Based on `TECH_STACK` from step 0, determine which skills the implementation subagent loads:
 
 | Tech Stack | Skills to Load |
 |-----------|---------------|
@@ -137,29 +137,29 @@ Based on `TECH_STACK` detected in step 0, determine which skills the implementat
 | Vue / Svelte / Angular | `/building-components` |
 | Non-frontend | (none) |
 
-Store the skill list as `CONTEXT_SKILLS`.
+Store skill list as `CONTEXT_SKILLS`.
 
 #### 2b. Library documentation
 
-For each library in `KEY_LIBRARIES`, use `context7` to fetch current documentation relevant to the implementation tasks. Store results as `LIBRARY_DOCS` -- forwarded to the implementer subagent prompt.
+For each library in `KEY_LIBRARIES`, use `context7` to fetch current documentation relevant to tasks. Store as `LIBRARY_DOCS` -- forwarded to implementer subagent prompt.
 
 Limit to **5 most task-relevant libraries**. Skip unresolvable libraries silently.
 
 #### 2c. Dependency source
 
-Scan `tasks.md` for tasks requiring deep integration with npm packages (extending internals, wrapping unexported utilities, working around undocumented behavior). Use `npx opensrc` to fetch those packages locally. The implementer subagent can then read the source directly.
+Scan `tasks.md` for tasks needing deep npm-package integration (extending internals, wrapping unexported utilities, working around undocumented behavior). Use `npx opensrc` to fetch those packages locally. Implementer subagent then reads source directly.
 
 Skip if no tasks need source-level understanding. Limit to **3 packages**.
 
 #### 2d. Codebase context
 
-If `tasks.md` references many existing files (5+), use `npx repomix` to pack the relevant directories into a compressed file. Derive scope from file paths in `tasks.md` and `plan.md`. The implementer reads this at session start for a codebase overview.
+If `tasks.md` references many existing files (5+), use `npx repomix` to pack relevant directories into a compressed file. Derive scope from file paths in `tasks.md` and `plan.md`. Implementer reads this at session start for codebase overview.
 
-Skip if scope is narrow -- the implementer can read files directly.
+Skip if scope is narrow -- implementer can read files directly.
 
 #### 2e. Confirm and record
 
-Briefly confirm to the user which contexts will be loaded (one line per category):
+Briefly confirm to user which contexts will load (one line per category):
 
 ```text
 Skills: /vercel-composition-patterns, /vercel-react-best-practices, /building-components
@@ -168,61 +168,61 @@ Source: @tanstack/react-query (npx opensrc)
 Codebase: src/components/**, src/hooks/** (npx repomix, compressed)
 ```
 
-Update `${PROGRESS_FILE}` Context Loading section with the full list of loaded contexts.
+Update `${PROGRESS_FILE}` Context Loading section with full list of loaded contexts.
 
 ### 3. Execute Implementation (Pass 1)
 
 Spawn subagent **implementer** (Opus, low):
 
 **Context loading phase** (beginning of subagent session):
-- If `CONTEXT_SKILLS` is not empty, invoke each skill to load best-practice guidance
-- If `LIBRARY_DOCS` is not empty, include the fetched documentation summaries in the subagent prompt
-- If a repomix context file was generated, read it for codebase overview
-- If `npx opensrc` packages were fetched, mention their paths so the subagent can read source when needed
+- If `CONTEXT_SKILLS` not empty, invoke each skill to load best-practice guidance
+- If `LIBRARY_DOCS` not empty, include fetched documentation summaries in subagent prompt
+- If repomix context file generated, read it for codebase overview
+- If `npx opensrc` packages fetched, mention their paths so subagent reads source when needed
 
 **Implementation phase**:
 - Run `/speckit.implement` with any user-provided arguments forwarded
-- The loaded best practices and documentation remain in context throughout -- apply them when writing components, structuring code, and making architectural micro-decisions
+- Loaded best practices and documentation remain in context throughout -- apply them when writing components, structuring code, making architectural micro-decisions
 
-**Available tools during implementation** -- all external tools from the Configuration section are available. Use them as needed, not mandatory.
+**Available tools during implementation** -- all external tools from Configuration section available. Use as needed, not mandatory.
 
-After the subagent completes, update `${PROGRESS_FILE}` Implementation Pass 1 section with tasks completed, tasks remaining, tools used, and any errors.
+After subagent completes, update `${PROGRESS_FILE}` Implementation Pass 1 section with tasks completed, tasks remaining, tools used, any errors.
 
 Spawn subagent **committer** (Opus, low): Run `/commit`.
 
 ### 4. Verify and Retry
 
-Read `${SPEC_DIR}/tasks.md` and check whether all tasks are marked `[X]`.
+Read `${SPEC_DIR}/tasks.md`, check whether all tasks marked `[X]`.
 
 **If all complete**: Skip to step 5.
 
 **If tasks remain (`[ ]`)**: Run up to 2 additional passes (3 total). For each retry:
 
-1. Report which tasks are still open (task IDs and descriptions).
-2. **Diagnose blockers** before retrying blindly -- use the external tools from Configuration to gather context (docs, GitHub examples, screenshots, dependency source) and include the diagnosis in the retry prompt.
+1. Report which tasks still open (task IDs and descriptions).
+2. **Diagnose blockers** before retrying blindly -- use external tools from Configuration to gather context (docs, GitHub examples, screenshots, dependency source); include diagnosis in retry prompt.
 3. Spawn subagent **implementer-pass-N** (Opus, low):
    - Load `CONTEXT_SKILLS` again (fresh context window needs them reloaded)
    - Include `LIBRARY_DOCS` and any new documentation gathered during diagnosis
-   - Include specific diagnosis and hints for the failing tasks
-   - Run `/speckit.implement` -- it picks up uncompleted tasks automatically because only `[ ]` tasks remain
+   - Include specific diagnosis and hints for failing tasks
+   - Run `/speckit.implement` -- picks up uncompleted tasks automatically because only `[ ]` tasks remain
    - Same external tools available as in pass 1
 4. Update `${PROGRESS_FILE}` Implementation Pass N section.
 5. Spawn subagent **committer** (Opus, low): Run `/commit`.
 6. Re-read `tasks.md` -- if all complete, break out of retry loop.
 
-**If still incomplete after 3 passes**: Report the remaining tasks with their IDs and descriptions, and ask the user how to proceed:
+**If still incomplete after 3 passes**: Report remaining tasks with IDs and descriptions, ask user how to proceed:
 - Retry again
 - Skip remaining tasks and continue to report
 - Investigate specific failures
 
 ### 5. Report
 
-Present a summary:
+Present summary:
 
-- Path to `${PROGRESS_FILE}` with the full audit trail
+- Path to `${PROGRESS_FILE}` with full audit trail
 - Completed tasks by phase (Setup, Tests, Core, Integration, Polish)
 - Any failures or skipped tasks with reasons
-- How many passes were needed (1, 2, or 3)
+- How many passes needed (1, 2, or 3)
 - External tools used and what they contributed
 - Test results and coverage status
 - Next steps: run `/ah-finalize-code` to prepare for PR
@@ -262,14 +262,14 @@ Present a summary:
 
 ## Important Notes
 
-- Every subagent runs on Opus with low. The `committer` only creates a commit via `/commit`.
-- The `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
-- **Resume support**: Re-running the skill detects an existing progress file and offers to resume from the last incomplete step. Completed steps and their commits are skipped.
-- **Duration tracking**: Each subagent records start/end timestamps and computes duration (e.g., `duration: 2m 34s`).
-- **Tech stack detection** informs which best-practice skills are loaded. React/Next.js projects get the full set; other frontend frameworks get component-building guidance; non-frontend projects skip context loading entirely.
-- **External tools are situational**: The tools listed in the Configuration section are available but not mandatory for every run. Use them when they add value -- unfamiliar APIs, visual UI work, deep dependency integration, or large codebase scope. Skip them for straightforward tasks.
-- **Monorepo support**: If the repo is a monorepo, commands are scoped to the target application identified from tasks.md or changed file paths.
+- Every subagent runs Opus, low. `committer` only creates a commit via `/commit`.
+- `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
+- **Resume support**: Re-running detects existing progress file, offers resume from last incomplete step. Completed steps and their commits skipped.
+- **Duration tracking**: Each subagent records start/end timestamps, computes duration (e.g., `duration: 2m 34s`).
+- **Tech stack detection** informs which best-practice skills load. React/Next.js gets full set; other frontend frameworks get component-building guidance; non-frontend skips context loading entirely.
+- **External tools are situational**: Tools in Configuration section available but not mandatory every run. Use when they add value -- unfamiliar APIs, visual UI work, deep dependency integration, large codebase scope. Skip for straightforward tasks.
+- **Monorepo support**: If repo is a monorepo, commands scoped to target application identified from tasks.md or changed file paths.
 - All Spec Kit output files live in `specs/<branch-name>/`.
-- If any subagent fails, note the failure in `${PROGRESS_FILE}` and report to the user. Do not silently skip steps.
-- After implementation is complete, the natural next step is `/ah-finalize-code` which handles simplification, testing, docs, code review, and PR creation.
+- If any subagent fails, note failure in `${PROGRESS_FILE}` and report to user. Do not silently skip steps.
+- After implementation complete, natural next step is `/ah-finalize-code` -- handles simplification, testing, docs, code review, PR creation.
 - Base branch and issue number come from `spec.md` metadata -- if missing, ask the user.

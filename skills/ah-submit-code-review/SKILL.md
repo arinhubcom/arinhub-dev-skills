@@ -6,25 +6,25 @@ argument-hint: "PR number or URL (e.g., 123, #456, https://github.com/owner/repo
 
 # Submit Code Review
 
-Submit a structured code review with line-specific comments to a GitHub pull request. Identifies issues in the current chat session or review file, checks for duplicate comments, and submits the review.
+Submit structured code review with line-specific comments to GitHub PR. Identifies issues in current chat session or review file, checks duplicate comments, submits review.
 
 ## Input
 
-- **PR number or URL** (required): The pull request identifier. Accepts:
+- **PR number or URL** (required): PR identifier. Accepts:
   - Number: `123`
   - Hash-prefixed: `#123`
   - Full URL: `https://github.com/owner/repo/pull/123`
-- **Review file path** (optional): Path to a review file produced by `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/code-review-pr-my-app-123.md`). If provided, issues are extracted from this file instead of the current chat session.
+- **Review file path** (optional): Path to review file from `ah-review-code` (e.g., `~/.agents/arinhub/code-reviews/code-review-pr-my-app-123.md`). If provided, extract issues from this file instead of current chat session.
 
 ## Configuration
 
-- **Subagent defaults**: Opus with low effort for all subagents.
+- **Subagent defaults**: Opus, low effort, all subagents.
 
 ## Procedure
 
 ### 1. Resolve PR Identifier
 
-Extract the PR number from the user input. Strip any `#` prefix or parse the number from a URL. Also resolve the repository owner and name for API calls.
+Extract PR number from user input. Strip `#` prefix or parse number from URL. Resolve repo owner and name for API calls.
 
 ```bash
 PR_NUMBER=<extracted number>
@@ -34,31 +34,29 @@ REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
 
 ### 2. Fetch PR Metadata
 
-Gather PR details:
-
 ```bash
 gh pr view $PR_NUMBER --json number,title,body,baseRefName,headRefName,files,url
 ```
 
 ### 3. Verify Requirements Coverage
 
-Check whether requirements coverage data is already available:
+Check whether coverage data already available:
 
-1. **Review file provided**: If a review file path was given, check whether it contains a `## Requirements Coverage` section. If yes, extract the coverage percentage and summary — no further action needed.
-2. **Current chat session**: If no review file was provided, check the current chat session for output from a previous `ah-verify-requirements-coverage` invocation (sections starting with `## Requirements Coverage:`). If found, use that data — no further action needed.
-3. **No coverage data available**: If neither source contains requirements coverage, spawn a subagent (Opus, low) to execute the `/ah-verify-requirements-coverage` skill:
-   - Pass the PR number resolved in Step 1.
-   - If a linked issue number is known (e.g., from the review file or PR body), pass it as well.
-   - Store the resulting coverage report for use when composing the main review comment in Step 8.
+1. **Review file provided**: If review file path given, check for `## Requirements Coverage` section. If yes, extract coverage percentage and summary -- done.
+2. **Current chat session**: If no review file, check current chat session for output from prior `ah-verify-requirements-coverage` invocation (sections starting `## Requirements Coverage:`). If found, use it -- done.
+3. **No coverage data**: If neither source has coverage, spawn subagent (Opus, low) to execute `/ah-verify-requirements-coverage` skill:
+   - Pass PR number from Step 1.
+   - If linked issue number known (e.g., from review file or PR body), pass it too.
+   - Store resulting coverage report for main review comment in Step 8.
 
-If the subagent cannot find a linked issue (e.g., the PR body has no closing keywords and no explicit issue reference), proceed without coverage data — the main review comment will note that coverage data is unavailable.
+If subagent cannot find linked issue (e.g., PR body has no closing keywords, no explicit issue reference), proceed without coverage data -- main review comment will note coverage data unavailable.
 
 ### 4. Fetch Existing Review Comments
 
-Retrieve all existing review comments to prevent duplication. Use the
-`scripts/gh-summarize.sh` wrapper (resolve the path relative to this SKILL.md's
-directory) -- it projects each item to a few fields, truncates long bodies, and
-caps the item count so a busy PR does not flood context (the true total is
+Retrieve all existing review comments to prevent duplication. Use
+`scripts/gh-summarize.sh` wrapper (resolve path relative to this SKILL.md's
+directory) -- projects each item to a few fields, truncates long bodies,
+caps item count so busy PR does not flood context (true total
 printed to stderr):
 
 ```bash
@@ -76,52 +74,52 @@ Also fetch top-level review bodies:
   '{id, body, state, user: .user.login}'
 ```
 
-Each emitted line is one compact JSON object. For deduplication (Step 6) only the
+Each emitted line is one compact JSON object. For deduplication (Step 6) only
 `path`/`line`/`body` of each existing comment matters.
 
 ### 5. Get Issue List
 
-Get a list of issues from one of these sources (in priority order):
+Get issue list from one source (priority order):
 
-1. **Review file**: If a review file path is provided (e.g., from `ah-review-code` orchestrator), read the file and extract all issues from the `## Issues` section.
-2. **Current chat session**: If no review file is specified, collect issues identified during the code review in the current chat session.
+1. **Review file**: If review file path provided (e.g., from `ah-review-code` orchestrator), read file and extract all issues from `## Issues` section.
+2. **Current chat session**: If no review file, collect issues identified during code review in current chat session.
 
-For each issue found, record:
+For each issue, record:
 
-- `severity`: One of `High Priority`, `Medium Priority`, or `Low Priority`
-- `title`: A short descriptive title for the issue (e.g., "Unvalidated user input passed to SQL query")
-- `path`: The relative file path
-- `file_in_diff`: Whether the file appears in the PR diff (`true` or `false`). Issues with `file_in_diff: false` cannot be posted as inline thread comments -- they are included in the main review body instead (see Step 8).
-- `line`: The specific line number in the new version of the file. For multi-line issues, this is the **last** line of the range.
-- `start_line` (optional): The first line of a multi-line range. Only set when the issue spans more than one line.
-- `explanation`: A concise, actionable comment explaining the issue (the "why", not just the "what")
-- `suggestion` (optional): Raw replacement code for a concrete fix. Only set for simple, contiguous changes (see **Suggestion conversion rules**). When set, this code replaces lines `start_line` (or `line`) through `line` verbatim. Do not include ` ```suggestion ` fences -- they are added automatically in Step 8. For complex suggestions (multiple diff blocks or non-contiguous changes), do **not** set this field; instead append the diff block(s) to `explanation`.
+- `severity`: One of `High Priority`, `Medium Priority`, `Low Priority`
+- `title`: Short descriptive title (e.g., "Unvalidated user input passed to SQL query")
+- `path`: Relative file path
+- `file_in_diff`: Whether file appears in PR diff (`true` or `false`). Issues with `file_in_diff: false` cannot be posted as inline thread comments -- included in main review body instead (see Step 8).
+- `line`: Specific line number in new version of file. For multi-line issues, this is the **last** line of range.
+- `start_line` (optional): First line of multi-line range. Set only when issue spans more than one line.
+- `explanation`: Concise, actionable comment explaining issue (the "why", not just the "what")
+- `suggestion` (optional): Raw replacement code for concrete fix. Set only for simple, contiguous changes (see **Suggestion conversion rules**). When set, this code replaces lines `start_line` (or `line`) through `line` verbatim. Do not include ` ```suggestion ` fences -- added automatically in Step 8. For complex suggestions (multiple diff blocks or non-contiguous changes), do **not** set this field; instead append diff block(s) to `explanation`.
 
 #### Parsing a review file
 
-When the issue list comes from a review file (source 1 above), the file uses a
-different format than the submission API. Read
-[references/parse-review-file.md](references/parse-review-file.md) for the
-field-mapping table and the suggestion-conversion rules (when to emit a GitHub
-`suggestion` vs. append the diff to the explanation). Skip that reference when
-issues come from the current chat session (source 2).
+When issue list comes from review file (source 1 above), file uses
+different format than submission API. Read
+[references/parse-review-file.md](references/parse-review-file.md) for
+field-mapping table and suggestion-conversion rules (when to emit GitHub
+`suggestion` vs. append diff to explanation). Skip that reference when
+issues come from current chat session (source 2).
 
 ### 6. Deduplicate Comments
 
-For each issue identified in Step 5, compare against existing comments from Step 4:
+For each issue from Step 5, compare against existing comments from Step 4:
 
-- **Skip** if an existing comment on the same `path` and `line` (or nearby range +/- 5 lines) already addresses the same concern
-- **Skip** if the issue is already mentioned in any top-level review body
-- Use semantic comparison, not exact string matching -- if the existing comment covers the same problem, even with different wording, skip the new comment
+- **Skip** if existing comment on same `path` and `line` (or nearby range +/- 5 lines) already addresses same concern
+- **Skip** if issue already mentioned in any top-level review body
+- Use semantic comparison, not exact string matching -- if existing comment covers same problem, even with different wording, skip new comment
 
 ### 7. Decision Gate
 
-- If **no new issues** remain after deduplication (neither inline nor non-diff): **Do not submit a review.** Inform the user that no new issues were found beyond existing review comments.
-- If **new issues exist** (inline, non-diff, or both): Proceed to Step 8. A review with only non-diff issues is still submitted -- the issues appear in the main review body even though there are no inline thread comments.
+- If **no new issues** remain after deduplication (neither inline nor non-diff): **Do not submit a review.** Inform user no new issues found beyond existing review comments.
+- If **new issues exist** (inline, non-diff, or both): Proceed to Step 8. A review with only non-diff issues is still submitted -- issues appear in main review body even though no inline thread comments.
 
 ### 8. Submit the Review
 
-Submit a single review via the GitHub API. The review consists of one **main review comment** with individual **thread comments** that appear as conversation threads anchored to specific lines in the diff.
+Submit single review via GitHub API. Review consists of one **main review comment** with individual **thread comments** appearing as conversation threads anchored to specific lines in diff.
 
 **Main review comment** (`body`): You MUST use the Read tool to read `references/main-review-comment.md` before composing the main review body. Follow its template and formatting exactly.
 
@@ -129,10 +127,10 @@ Submit a single review via the GitHub API. The review consists of one **main rev
 
 #### Separating inline vs. non-diff issues
 
-Before building the payload, split the deduplicated issues into two groups:
+Before building payload, split deduplicated issues into two groups:
 
-- **Inline issues** (`file_in_diff: true`): Posted as thread comments anchored to specific lines in the diff.
-- **Non-diff issues** (`file_in_diff: false`): Cannot be posted as thread comments (the API would reject them). Instead, these are appended to the main review body as a dedicated section. **However**, only include a non-diff issue if it is directly relevant to the PR body context (e.g., the change described in the PR description or the files/features the PR touches) **or** the requirements coverage context (e.g., a requirement from the linked issue that the PR should address). If a non-diff issue falls outside both of these contexts, **drop it** — do not include it in the review body. The issues table in Step 9 will still list all non-diff issues, but the "Reason" column will explain why any non-diff issue was excluded from the review body.
+- **Inline issues** (`file_in_diff: true`): Posted as thread comments anchored to specific lines in diff.
+- **Non-diff issues** (`file_in_diff: false`): Cannot be posted as thread comments (API would reject them). Instead appended to main review body as dedicated section. **However**, only include a non-diff issue if directly relevant to PR body context (e.g., the change described in PR description or files/features the PR touches) **or** requirements coverage context (e.g., a requirement from linked issue the PR should address). If a non-diff issue falls outside both contexts, **drop it** -- do not include in review body. The issues table in Step 9 will still list all non-diff issues, but "Reason" column will explain why any non-diff issue was excluded from review body.
 
 #### Determining event type
 
@@ -141,9 +139,9 @@ Before building the payload, split the deduplicated issues into two groups:
 
 #### Comment types
 
-Each entry in `comments` uses one of two shapes depending on whether the issue targets a single line or a range of lines:
+Each entry in `comments` uses one of two shapes depending on whether issue targets a single line or a range of lines:
 
-**Single-line comment** -- targets exactly one line in the diff:
+**Single-line comment** -- targets exactly one line in diff:
 
 ```json
 {
@@ -156,7 +154,7 @@ Each entry in `comments` uses one of two shapes depending on whether the issue t
 
 Required fields: `path`, `line`, `side`.
 
-**Multi-line comment** -- targets a range from `start_line` through `line` (both inclusive, both must be within the same diff hunk):
+**Multi-line comment** -- targets range from `start_line` through `line` (both inclusive, both must be within same diff hunk):
 
 ```json
 {
@@ -169,23 +167,23 @@ Required fields: `path`, `line`, `side`.
 }
 ```
 
-Required fields: `path`, `start_line`, `line`, `start_side`, `side`. The suggestion content replaces **all** lines from `start_line` through `line` verbatim.
+Required fields: `path`, `start_line`, `line`, `start_side`, `side`. Suggestion content replaces **all** lines from `start_line` through `line` verbatim.
 
 #### Preflight validation
 
 Run before submission:
 
-- Validate JSON payload syntax (e.g., pipe the heredoc through `jq . >/dev/null`)
-- Every comment has `path`, `line`, and `side: "RIGHT"`
+- Validate JSON payload syntax (e.g., pipe heredoc through `jq . >/dev/null`)
+- Every comment has `path`, `line`, `side: "RIGHT"`
 - Multi-line comments additionally have `start_line` and `start_side: "RIGHT"`
-- `line` (and `start_line` for ranges) falls inside the PR diff hunk for that file
-- Each `body` that includes a suggestion contains ` ```suggestion ``` ` fences wrapping the raw replacement code
+- `line` (and `start_line` for ranges) falls inside PR diff hunk for that file
+- Each `body` that includes suggestion contains ` ```suggestion ``` ` fences wrapping raw replacement code
 - Suggestion replacement code preserves indentation and exact intended final content
-- Empty suggestion block (` ```suggestion\n``` `) only when the intent is to delete the selected line(s)
+- Empty suggestion block (` ```suggestion\n``` `) only when intent is to delete selected line(s)
 
 #### Submit command
 
-Build the JSON payload with all comments (single-line and multi-line mixed) and submit:
+Build JSON payload with all comments (single-line and multi-line mixed) and submit:
 
 ```bash
 gh api repos/$REPO_OWNER/$REPO_NAME/pulls/$PR_NUMBER/reviews \
@@ -216,26 +214,26 @@ EOF
 
 #### Error handling
 
-If the API returns an error (e.g., `422 Unprocessable Entity`):
+If API returns error (e.g., `422 Unprocessable Entity`):
 
-1. Parse the error response to identify which comment(s) failed (GitHub typically reports the index or the `path`/`line` that is invalid).
-2. The most common cause is a `line` or `start_line` that falls outside the PR diff hunk. For each failing comment:
-   - Re-fetch the diff hunk for that file (`gh pr diff $PR_NUMBER` and locate the `@@` headers for the file).
-   - Verify that the `line` value falls within one of the hunk ranges. If not, adjust the line to the nearest valid line within the hunk, or drop the comment if no valid line exists.
-3. Remove or fix the failing comments and retry the submission **once**. If the retry also fails, report the error to the user with the full API response and the list of comments that could not be submitted.
+1. Parse error response to identify which comment(s) failed (GitHub typically reports index or `path`/`line` that is invalid).
+2. Most common cause: `line` or `start_line` falls outside PR diff hunk. For each failing comment:
+   - Re-fetch diff hunk for that file (`gh pr diff $PR_NUMBER` and locate `@@` headers for the file).
+   - Verify `line` value falls within one of hunk ranges. If not, adjust line to nearest valid line within hunk, or drop comment if no valid line exists.
+3. Remove or fix failing comments and retry submission **once**. If retry also fails, report error to user with full API response and list of comments that could not be submitted.
 
 ### 9. Report Result
 
-Present a summary of the review submission to the user, including:
+Present summary of review submission to user, including:
 
-1. The PR URL for reference
+1. PR URL for reference
 2. Number of review comments submitted vs. total issues found
 3. Requirements coverage summary (percentage and any missing requirements from Step 3)
-4. The Issues table below
+4. Issues table below
 
 #### Issues table
 
-You **MUST** output a markdown table listing **every** issue from Step 5 with its submission status and reason. Never omit this table, even when all issues were skipped. Use the following format:
+You **MUST** output a markdown table listing **every** issue from Step 5 with submission status and reason. Never omit this table, even when all issues skipped. Use this format:
 
 | #   | Severity        | File                | Line(s) | Title                          | Status         | Reason                            |
 | --- | --------------- | ------------------- | ------- | ------------------------------ | -------------- | --------------------------------- |
@@ -247,19 +245,19 @@ You **MUST** output a markdown table listing **every** issue from Step 5 with it
 
 **Status values:**
 
-- **Submitted** — comment was successfully posted as an inline thread comment on the PR. Reason: `—`
-- **In review body** — the file is not part of the PR diff (`file_in_diff: false`), so the issue was included in the main review body under the "Additional issues outside the diff" section. Reason: `File not in diff`
+- **Submitted** — comment successfully posted as inline thread comment on PR. Reason: `—`
+- **In review body** — file not part of PR diff (`file_in_diff: false`), so issue included in main review body under "Additional issues outside the diff" section. Reason: `File not in diff`
 - **Skipped (duplicate)** — removed during deduplication (Step 6). Reason: describe which existing comment covers it
-- **Skipped (no diff line)** — the target line is not within any diff hunk and could not be adjusted. Reason: explain why
-- **Failed** — the API rejected the comment and the retry also failed. Reason: include the API error detail
+- **Skipped (no diff line)** — target line not within any diff hunk and could not be adjusted. Reason: explain why
+- **Failed** — API rejected comment and retry also failed. Reason: include API error detail
 
-If no review was submitted (Step 7), explain that no new issues were found beyond existing review comments and still show the table with all issues marked as skipped.
+If no review submitted (Step 7), explain no new issues found beyond existing review comments and still show table with all issues marked skipped.
 List all issues in descending severity order (High → Medium → Low).
 
 ## Important Notes
 
-- The `line` field in review comments must reference a line that appears in the diff -- comments on unchanged lines will be rejected by the API
-- For multi-line suggestions, use `start_line` and `line` together to define the range being replaced; both must be within the diff hunk
+- The `line` field in review comments must reference a line that appears in diff -- comments on unchanged lines will be rejected by API
+- For multi-line suggestions, use `start_line` and `line` together to define range being replaced; both must be within diff hunk
 - An empty suggestion block (` ```suggestion\n``` `) means "delete these lines"
-- The content inside ` ```suggestion ``` ` replaces the selected line(s) verbatim -- ensure correct indentation and formatting
-- Never fabricate issues -- only flag genuine concerns backed by evidence in the code
+- Content inside ` ```suggestion ``` ` replaces selected line(s) verbatim -- ensure correct indentation and formatting
+- Never fabricate issues -- only flag genuine concerns backed by evidence in code

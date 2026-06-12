@@ -1,6 +1,6 @@
 ---
 name: ah-workflow
-description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", or "ah full workflow". Takes a feature description, an issue number, and a base branch, then sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-check-qa -> ah-finalize-code (which creates the PR) -> revise-claude-md. Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Make sure to use this skill whenever the user wants to take a feature from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
+description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", or "ah full workflow". Takes a feature description, an issue number, and a base branch, then sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-check-qa -> ah-finalize-code (which creates the PR) -> revise-claude-md. Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
 argument-hint: "a feature description, an issue number, a base branch (optional: dry-run, skip <phase>, max-retries N, resume)"
 ---
 
@@ -12,16 +12,16 @@ each phase skill is itself a multi-step workflow, and here we run them in order 
 phase (except the final CLAUDE.md revision, which runs in the main session) -- carrying the right
 inputs forward between them.
 
-The reason this exists: today each `ah-*` skill is launched by hand and the hand-off between them is
-just a sentence ("next, run ah create tasks"). This skill makes the hand-off real -- it captures each
-phase's outputs, feeds them into the next phase, records progress, and keeps the whole thing aimed at
-one completion goal without spinning forever on a phase that can't make progress.
+Why this exists: today each `ah-*` skill is launched by hand and the hand-off between them is just a
+sentence ("next, run ah create tasks"). This skill makes the hand-off real -- it captures each
+phase's outputs, feeds them into the next phase, records progress, and keeps the run aimed at one
+completion goal without spinning forever on a phase that can't progress.
 
 ## Configuration
 
 - **Orchestrator model**: This `ah-workflow` orchestrator itself runs on Opus with low effort.
 - **Subagent defaults**: Opus with low effort for every phase subagent. Each phase subagent's
-  job is simply to invoke the corresponding `ah-*` skill and report back the artifacts it produced.
+  job is to invoke the corresponding `ah-*` skill and report back the artifacts it produced.
 - **Phase skills don't need a committer here**: each `ah-*` phase skill (phases 1-5) already runs its
   own `committer` subagent internally, so this orchestrator does not commit on its own. The exception
   is phase 6 (`revise-claude-md`), which is not an `ah-*` skill and does not commit -- handle its
@@ -43,7 +43,7 @@ one completion goal without spinning forever on a phase that can't make progress
 
 `ah-create-pr` is **not** a separate phase -- `ah-finalize-code` calls it at the end of phase 5.
 
-The key input propagation: phases 1 and 2 are where data flows between skills. Phase 1 produces the
+Key input propagation: phases 1 and 2 are where data flows between skills. Phase 1 produces the
 PRD and ADR paths; you pass them into phase 2. **Important about the base branch:** `ah-create-tasks`
 does not take a base branch as an argument -- it reads `git branch --show-current` and uses whatever
 is checked out as the base, branching off it. So the orchestrator must `git checkout <base-branch>`
@@ -94,7 +94,7 @@ done
 - **Running** -> record the URL; phase 4 (QA) will run against it.
 - **Not running** -> tell the user the QA phase will soft-skip, and offer to let them start the dev
   server now (and wait) before continuing. QA needs a live app; without one its findings are
-  meaningless, so it's better to decide here than at phase 4.
+  meaningless, so decide here rather than at phase 4.
 
 Record the result in the progress file's **Dev server** field.
 
@@ -186,7 +186,7 @@ QA is a soft gate, not a hard stop:
 - **No dev server** -> skip with a clear note in the report and progress file (decided in preflight).
 - **Critical findings** -> report them and **pause the workflow before phase 5 (finalize)** so the user
   decides: fix first, proceed anyway, or abort. Don't auto-proceed past Critical findings.
-- **Warning / Info** -> just record them and continue.
+- **Warning / Info** -> record them and continue.
 
 ### Dry run
 

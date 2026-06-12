@@ -6,30 +6,29 @@ argument-hint: "URL or page description, element selector or interaction that tr
 
 # Fix UI Bug with Chrome DevTools CLI
 
-This skill uses the `chrome-devtools-cli` skill for all browser interactions.
-Invoke `/chrome-devtools-cli` if you need help with command syntax or flags.
+Uses `chrome-devtools-cli` skill for all browser interactions.
+Invoke `/chrome-devtools-cli` for command syntax or flags.
 
-Diagnostic scripts are in the `scripts/` directory. To use them: read the
-script file, customize the selector for the specific bug, then pass the
-content to `chrome-devtools evaluate_script`.
+Diagnostic scripts in `scripts/`. To use: read script file, customize
+selector for the bug, pass content to `chrome-devtools evaluate_script`.
 
 ## Input
 
-- **Page URL or description** (REQUIRED): The URL, Storybook story, or page description where the bug reproduces (e.g., `http://localhost:6006/iframe.html?id=...`, "Settings page").
+- **Page URL or description** (REQUIRED): URL, Storybook story, or page description where bug reproduces (e.g., `http://localhost:6006/iframe.html?id=...`, "Settings page").
 - **Suspected element** (optional): CSS selector, component name, or description (e.g., `.save-btn`, "save button overlay").
-- **Interaction type** (optional): What triggers the bug -- click, hover, drag, scroll, resize, animation.
+- **Interaction type** (optional): What triggers bug -- click, hover, drag, scroll, resize, animation.
 
 ## Procedure
 
 ### 0. Verify Chrome DevTools Connection
 
-Ensure Chrome is running with DevTools protocol enabled.
+Ensure Chrome running with DevTools protocol enabled.
 
 ```bash
 chrome-devtools list_pages
 ```
 
-If no pages are available, start the daemon:
+No pages available? Start daemon:
 
 ```bash
 chrome-devtools start
@@ -37,7 +36,7 @@ chrome-devtools start
 
 ### 1. Navigate and Snapshot
 
-Get oriented -- see what's on the page and identify element UIDs.
+Orient -- see page contents, identify element UIDs.
 
 ```bash
 # Navigate to the page with the bug
@@ -50,17 +49,17 @@ chrome-devtools take_snapshot --verbose true
 chrome-devtools take_screenshot --filePath /tmp/before.png
 ```
 
-The a11y snapshot returns elements like `uid=6_2 button "Apple"`. These UIDs
-are used in subsequent click/hover commands. Always prefer `take_snapshot` over
-`take_screenshot` for debugging -- it provides structured, queryable data.
+a11y snapshot returns elements like `uid=6_2 button "Apple"`. UIDs used in
+subsequent click/hover commands. Always prefer `take_snapshot` over
+`take_screenshot` for debugging -- structured, queryable data.
 
-For Storybook, use the iframe URL (`/iframe.html?id=...`) to avoid Storybook's
+For Storybook, use iframe URL (`/iframe.html?id=...`) to avoid Storybook's
 own UI interfering with snapshots.
 
 ### 2. Triage
 
-Before instrumenting, classify the bug to choose the right diagnostics.
-Match the primary symptom to decide which scripts to inject in Step 3:
+Before instrumenting, classify bug to choose right diagnostics.
+Match primary symptom to decide which scripts to inject in Step 3:
 
 | Symptom                                    | Category          | Scripts to Inject                                    |
 | ------------------------------------------ | ----------------- | ---------------------------------------------------- |
@@ -75,16 +74,16 @@ Match the primary symptom to decide which scripts to inject in Step 3:
 | Layout breaks at certain viewport widths   | Responsive        | `computed-styles-dump.js` + `resize_page`            |
 | Scroll jumps or content shifts on scroll   | Scroll            | `layout-shift-detection.js` + `scroll-tracking.js`   |
 | Sticky element stops sticking              | Sticky            | `computed-styles-dump.js` on element + ancestors      |
-| Click/hover passes through element         | Pointer events    | `computed-styles-dump.js`                             |
+| Click/hover passes through element         | Pointer events    | `computed-styles-dump.js`                            |
 
-If unsure, start with `computed-styles-dump.js` and `position-tracking.js` --
-they cover the broadest range of issues.
+Unsure? Start with `computed-styles-dump.js` and `position-tracking.js` --
+broadest range of issues.
 
 ### 3. Instrument the Page
 
-Read the recommended script file(s) from `scripts/`, customize the selector
-(replace `.target-element`, `.flex-container`, etc. with the actual CSS selector
-for the bugged element), then inject via `chrome-devtools evaluate_script`.
+Read recommended script file(s) from `scripts/`, customize selector
+(replace `.target-element`, `.flex-container`, etc. with actual CSS selector
+for bugged element), inject via `chrome-devtools evaluate_script`.
 
 Available scripts in `scripts/`:
 
@@ -117,21 +116,21 @@ chrome-devtools evaluate_script "() => {
 
 #### Script Usage Notes
 
-**animation-logging.js** -- Patches the global `HTMLElement.prototype.animate`,
-no selector needed. Assumes the object-of-arrays keyframe format
-(`{transform: ['...', '...']}`). Adjust the script if the code uses the
+**animation-logging.js** -- Patches global `HTMLElement.prototype.animate`,
+no selector needed. Assumes object-of-arrays keyframe format
+(`{transform: ['...', '...']}`). Adjust script if code uses
 array-of-objects format. Read logged animations via:
 
 ```bash
 chrome-devtools list_console_messages --pageSize 20 --types log
 ```
 
-**persistent-overlay.js** -- Use when automated clicks don't reproduce the bug
+**persistent-overlay.js** -- Use when automated clicks don't reproduce bug
 (some libraries like dnd-kit's PointerSensor check `event.isPrimary` on synthetic
-events). Inject it, then ask the user to interact manually in the browser. After
-the user interacts, read collected data and take a screenshot.
+events). Inject it, then ask user to interact manually in browser. After
+user interacts, read collected data and take screenshot.
 
-**visual-position-marker.js** -- Pass coordinates as args. The dot auto-removes
+**visual-position-marker.js** -- Pass coordinates as args. Dot auto-removes
 after 3 seconds:
 
 ```bash
@@ -160,7 +159,7 @@ chrome-devtools click "<uid>" --includeSnapshot true
 chrome-devtools performance_stop_trace --filePath /tmp/trace.json
 ```
 
-The trace file can be loaded in Chrome DevTools (Performance tab) or
+Trace file loads in Chrome DevTools (Performance tab) or
 `chrome://tracing`. Look for:
 
 - Long frames (>16ms) causing visual jank
@@ -170,7 +169,7 @@ The trace file can be loaded in Chrome DevTools (Performance tab) or
 
 #### Viewport / Responsive Testing
 
-Test layout at different viewport widths when the bug only appears at certain
+Test layout at different viewport widths when bug only appears at certain
 screen sizes:
 
 ```bash
@@ -187,13 +186,13 @@ chrome-devtools resize_page 1920 1080   # Large desktop
 chrome-devtools take_screenshot --filePath /tmp/large-desktop.png
 ```
 
-Between resizes, run `scripts/computed-styles-dump.js` on the problematic element
+Between resizes, run `scripts/computed-styles-dump.js` on problematic element
 to see which CSS properties change at each breakpoint. For container queries,
 use `scripts/viewport-responsive-check.js` after customizing the selector.
 
 ### 4. Interact and Capture
 
-Reproduce the bug while instrumentation is active.
+Reproduce bug while instrumentation active.
 
 ```bash
 # Click elements by UID (from take_snapshot) -- use --includeSnapshot to get
@@ -220,43 +219,43 @@ chrome-devtools evaluate_script "() => JSON.stringify(window.__mutations)"
 chrome-devtools evaluate_script "() => JSON.stringify(window.__scrollLog)"
 ```
 
-If automated clicks don't reproduce the bug (some libraries check
-`event.isPrimary` on synthetic events), use `scripts/persistent-overlay.js`
-and ask the user to interact manually in the browser.
+Automated clicks don't reproduce bug (some libraries check
+`event.isPrimary` on synthetic events)? Use `scripts/persistent-overlay.js`
+and ask user to interact manually in browser.
 
 ### 5. Diagnose
 
-Analyze collected data to identify the root cause. Work through the data
+Analyze collected data to find root cause. Work through data
 systematically -- don't jump to conclusions from a single signal.
 
 #### Reading Diagnostic Output
 
-**computed-styles-dump.js** -- Look for mismatches between what you expect
-and what's computed. Key signals:
-- `position: static` on an element that should be `fixed` or `absolute`
-- `overflow: hidden` when content is clipped unexpectedly
+**computed-styles-dump.js** -- Look for mismatches between expected
+and computed. Key signals:
+- `position: static` on element that should be `fixed` or `absolute`
+- `overflow: hidden` when content clipped unexpectedly
 - `display: none` or `visibility: hidden` when element should be visible
-- `rect` with `w: 0` or `h: 0` means the element has collapsed
-- `transform: none` when an animation should be active
-- `zIndex: auto` on a positioned element that needs layering
+- `rect` with `w: 0` or `h: 0` = element collapsed
+- `transform: none` when animation should be active
+- `zIndex: auto` on positioned element needing layering
 
 **position-tracking.js** (`window.__posLog`) -- Look for:
-- Sudden jumps (large `from`/`to` deltas in a single entry) = layout shift
+- Sudden jumps (large `from`/`to` deltas in single entry) = layout shift
 - Gradual drift (many small changes) = animation or transition issue
 - Position snapping back to origin after interaction = containing block problem
 - Empty log = element isn't moving (bug may be in initial position, not movement)
 
 **layout-shift-detection.js** (`window.__shifts`) -- Look for:
 - `value > 0.1` = significant layout shift
-- `sources` array tells you which elements moved and their before/after rects
+- `sources` array tells which elements moved and their before/after rects
 - Shifts immediately after click = likely `display` toggle or content insertion
 
-**ancestor-css-check.js** -- Any results mean a containing block exists.
-The first entry in the array is the nearest ancestor creating the block --
-that's usually the one to fix.
+**ancestor-css-check.js** -- Any results mean containing block exists.
+First entry in array is nearest ancestor creating the block --
+usually the one to fix.
 
 **stacking-context-inspector.js** -- Read bottom-to-top (document root first).
-The element's effective z-index is determined by its nearest stacking context
+Element's effective z-index determined by its nearest stacking context
 ancestor, not its own z-index value. If two elements have different stacking
 context parents, compare those parents' z-index values.
 
@@ -266,36 +265,36 @@ context parents, compare those parents' z-index values.
 - Children `width` sum exceeding container width = overflow
 
 **attribute-mutation-observer.js** (`window.__mutations`) -- Look for:
-- Class additions that persist after interaction ends = stuck state
+- Class additions persisting after interaction ends = stuck state
 - Style attribute changing rapidly = JS fighting CSS transitions
 - `position` changing from `fixed` to `static` = framework cleanup race
 
 #### When First Hypothesis is Wrong
 
-If the triage category from Step 2 doesn't match the data:
-1. Run `computed-styles-dump.js` on the element -- it covers the broadest range
+If triage category from Step 2 doesn't match data:
+1. Run `computed-styles-dump.js` on element -- covers broadest range
 2. Run `ancestor-css-check.js` -- containing block issues masquerade as many
    different symptoms
-3. Compare the element's `rect` position with its CSS `top`/`left` values --
-   a large discrepancy points to a containing block or transform offset
-4. Check PARENT elements, not just the target -- the bug is often one level up
+3. Compare element's `rect` position with its CSS `top`/`left` values --
+   large discrepancy points to containing block or transform offset
+4. Check PARENT elements, not just the target -- bug is often one level up
 
 #### Common Root Causes
 
-For the symptom-to-cause lookup table and the detailed guides on containing
+For symptom-to-cause lookup table and detailed guides on containing
 blocks (`position:fixed`), z-index/stacking contexts, sticky positioning, and
 flex/grid sizing, read [references/root-causes.md](references/root-causes.md)
 when you need to map a diagnosed symptom to its likely cause and fix.
 
 ### 6. Find Source Code
 
-Bridge from browser diagnosis to the codebase. The goal is to find which
-source file renders the bugged element so you can apply the fix.
+Bridge from browser diagnosis to codebase. Goal: find which
+source file renders bugged element so you can apply the fix.
 
 **Strategy 1: Data attributes and unique identifiers** (most reliable)
 
-Look for `data-testid`, `data-*`, `id`, or `role` attributes in the snapshot.
-These are unique and map directly to source code:
+Look for `data-testid`, `data-*`, `id`, or `role` attributes in snapshot.
+Unique, map directly to source code:
 
 ```bash
 grep -r "data-overlay" src/ --include="*.tsx" --include="*.jsx" -l
@@ -304,7 +303,7 @@ grep -r 'testId.*"save-btn"' src/ --include="*.tsx" --include="*.jsx" -l
 
 **Strategy 2: Text content or aria labels**
 
-Visible text from the snapshot maps to JSX or i18n keys:
+Visible text from snapshot maps to JSX or i18n keys:
 
 ```bash
 grep -r "Save Changes" src/ --include="*.tsx" --include="*.jsx" -l
@@ -312,8 +311,8 @@ grep -r "Save Changes" src/ --include="*.tsx" --include="*.jsx" -l
 
 **Strategy 3: CSS class names**
 
-For Tailwind, search the exact utility combination. For CSS modules or
-styled-components, search the class root:
+For Tailwind, search exact utility combination. For CSS modules or
+styled-components, search class root:
 
 ```bash
 grep -r "overflow-hidden" src/ --include="*.tsx" --include="*.jsx" -l
@@ -322,14 +321,14 @@ grep -r "will-change" src/ --include="*.css" --include="*.tsx" -l
 
 **Strategy 4: Component name from React DevTools**
 
-If the snapshot shows a recognizable component structure, search for the
-component name directly. Storybook story IDs often contain the component
+If snapshot shows recognizable component structure, search for
+component name directly. Storybook story IDs often contain component
 path (e.g., `components-modal--default` maps to `components/Modal`).
 
 **Strategy 5: CSS property causing the bug**
 
-When the root cause is a specific CSS property (e.g., `will-change: transform`
-on an ancestor), search for that property. The fix often isn't on the bugged
+When root cause is a specific CSS property (e.g., `will-change: transform`
+on an ancestor), search for that property. Fix often isn't on bugged
 element itself but on a parent component:
 
 ```bash
@@ -337,17 +336,17 @@ grep -r "will-change" src/ --include="*.css" --include="*.tsx" -l
 grep -r "overflow-hidden" src/ --include="*.tsx" -l
 ```
 
-After locating the file, apply the fix pattern identified in Step 5.
+After locating file, apply fix pattern identified in Step 5.
 
 ### 7. Verify the Fix
 
-After applying a code fix:
+After applying code fix:
 
-1. Reload the page: `chrome-devtools navigate_page --url "..."`
+1. Reload page: `chrome-devtools navigate_page --url "..."`
 2. Take snapshot to get fresh UIDs: `chrome-devtools take_snapshot --verbose true`
 3. Re-inject verification scripts (position tracking, computed styles)
-4. Repeat the interaction: `chrome-devtools click "<uid>" --includeSnapshot true`
-5. Take snapshot to confirm DOM state is correct: `chrome-devtools take_snapshot --verbose true`
+4. Repeat interaction: `chrome-devtools click "<uid>" --includeSnapshot true`
+5. Take snapshot to confirm DOM state correct: `chrome-devtools take_snapshot --verbose true`
 6. Confirm no position diffs, correct computed styles, correct z-index ordering
 7. Take final screenshot for visual proof: `chrome-devtools take_screenshot --filePath /tmp/fixed.png`
 8. Optionally ask user to verify manually for pointer-event-dependent bugs
@@ -356,30 +355,30 @@ After applying a code fix:
 
 Present findings and resolution:
 
-- **Bug reproduced**: Yes/No, with description of the visual issue
+- **Bug reproduced**: Yes/No, with description of visual issue
 - **Root cause**: Which pattern from Step 5 matched (or unknown if none matched)
-- **Fix applied**: Description of the CSS/code change made
+- **Fix applied**: Description of CSS/code change made
 - **Verification**: Whether re-run of diagnostics confirmed the fix
 - **Screenshot**: Before and after screenshots for visual confirmation
 
 ## Error Handling
 
-- If Chrome DevTools connection fails, run `chrome-devtools start` to start the daemon
-- If diagnostic scripts fail to inject (e.g., CSP restrictions), inform the user and suggest disabling CSP in the dev environment
-- If automated clicks don't reproduce the bug, use `scripts/persistent-overlay.js` and ask the user to interact manually
-- If element UIDs are stale after page changes, re-take a snapshot with `chrome-devtools take_snapshot`
-- If the suspected element can't be found by selector, use `take_snapshot` to discover the correct selector from the a11y tree
+- Chrome DevTools connection fails? Run `chrome-devtools start` to start daemon
+- Diagnostic scripts fail to inject (e.g., CSP restrictions)? Inform user, suggest disabling CSP in dev environment
+- Automated clicks don't reproduce bug? Use `scripts/persistent-overlay.js`, ask user to interact manually
+- Element UIDs stale after page changes? Re-take snapshot with `chrome-devtools take_snapshot`
+- Suspected element can't be found by selector? Use `take_snapshot` to discover correct selector from a11y tree
 
 ## Important Notes
 
-- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots are only needed for visual confirmation.
-- All JavaScript snippets use `chrome-devtools evaluate_script`. The function must be an arrow function returning a JSON-serializable value.
+- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots only needed for visual confirmation.
+- All JavaScript snippets use `chrome-devtools evaluate_script`. Function must be arrow function returning JSON-serializable value.
 - Selectors in script files (`.target-element`, `.flex-container`) are placeholders -- customize them for the specific bug before injecting.
-- The `position-tracking.js` script runs a `requestAnimationFrame` loop that continues until page reload. This is intentional for capturing intermittent shifts.
-- CSS-level fixes (Portals, containing block escapes) are preferred over JavaScript workarounds for positioning bugs.
+- `position-tracking.js` runs a `requestAnimationFrame` loop continuing until page reload. Intentional for capturing intermittent shifts.
+- CSS-level fixes (Portals, containing block escapes) preferred over JavaScript workarounds for positioning bugs.
 - For single-frame flash/flicker timing races (element appears for one frame then disappears), use the `ah-fix-dom-flash` skill instead -- it has specialized detectors for that pattern.
-- When testing responsive bugs, use `chrome-devtools resize_page <width> <height>` to test multiple viewport sizes without manually resizing the browser.
+- When testing responsive bugs, use `chrome-devtools resize_page <width> <height>` to test multiple viewport sizes without manually resizing browser.
 
 ## Quick Reference
 
-For the full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.
+For full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.

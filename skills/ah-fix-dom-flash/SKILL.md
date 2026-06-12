@@ -7,10 +7,10 @@ argument-hint: "URL or page description, suspected element selector or interacti
 # Fix DOM Flash/Flicker Bugs
 
 This skill uses the `chrome-devtools-cli` skill for all browser interactions.
-Invoke `/chrome-devtools-cli` if you need help with command syntax or flags.
+Invoke `/chrome-devtools-cli` for help with command syntax or flags.
 
 Diagnostic scripts are in `scripts/`. The flash detector is configurable via
-`window.__flashDetectorConfig` -- set it before injecting, no manual script
+`window.__flashDetectorConfig` -- set it before injecting; no manual script
 editing needed.
 
 ## Input
@@ -28,7 +28,7 @@ editing needed.
 - Opacity flash: element briefly visible at full opacity before transition starts
 - Transform jump: element snaps to wrong position for one frame before animation
 - Portal/overlay content flashes when popover/tooltip/dialog closes
-- Any flicker that happens for one frame after an interaction or state change
+- Any flicker for one frame after an interaction or state change
 
 ## Procedure
 
@@ -107,9 +107,8 @@ repeat the interaction 2-3 more times *without* re-injecting the detector.
 It stays active and accumulates results across multiple interactions.
 
 Note: The detector stays active until you inject `collect-flash-results.js`,
-which stops it. If you need another detection round after collecting, you
-must re-inject the detector (and optionally the config) before reproducing
-again.
+which stops it. For another detection round after collecting, re-inject the
+detector (and optionally the config) before reproducing again.
 
 ### 5. Collect Results
 
@@ -134,7 +133,7 @@ The collector separates results into high-confidence flashes and lower-confidenc
 
 Focus on the `flashes` array -- these are actual flash bugs. The `noise`
 array contains MutationObserver events that may be normal DOM activity;
-only investigate these if `flashes` is empty and the user reports a visible
+investigate these only if `flashes` is empty and the user reports a visible
 flash.
 
 ### 6. Analyze Findings
@@ -145,7 +144,7 @@ flash.
 | --------------------------------------- | ------------------------------------------------------ |
 | `type: "position-lost"`                 | Element was fixed/absolute, became static -- FLASH BUG |
 | `type: "flash"`, position is `"static"` | Overlay has content without positioning                 |
-| `type: "transform-lost"` at (0,0)       | Animation cleared transform before unmount              |
+| `type: "transform-lost"` at (0,0)       | Animation cleared transform before unmount             |
 
 **Lower-confidence indicators** (in `noise`):
 

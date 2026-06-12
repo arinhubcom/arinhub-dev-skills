@@ -6,15 +6,15 @@ argument-hint: "a feature description, optionally a feature-name slug"
 
 # Create PRD and ADR from a Description
 
-Transform a feature **description** into two paired planning artifacts in a single run:
+Transform a feature **description** into two paired planning artifacts in one run:
 
 1. A **Product Requirements Document (PRD)** at `~/.agents/prds/prd-<repo>-<feature>.md`
 2. An **Architectural Decision Record (ADR)** at `~/.agents/adrs/adr-<repo>-<feature>.md`
 
 The PRD captures **what** and **why** (requirements, user stories, success criteria); the ADR
-captures **how** at the architecture level (the chosen design, trade-offs, alternatives). The
-ADR is generated second and reads the PRD for context, so the two stay aligned. The resulting
-pair is exactly what `ah create tasks` consumes next.
+captures **how** at the architecture level (chosen design, trade-offs, alternatives). The ADR
+is generated second and reads the PRD for context, so the two stay aligned. The resulting pair
+is what `ah create tasks` consumes next.
 
 ## Input
 
@@ -27,7 +27,7 @@ pair is exactly what `ah create tasks` consumes next.
 
 ### Step 0 - Initialize
 
-Resolve the repo name and the output paths:
+Resolve the repo name and output paths:
 
 ```bash
 REPO_NAME=$(basename -s .git "$(git remote get-url origin 2>/dev/null)")
@@ -98,7 +98,7 @@ Print a short summary:
 
 - **Naming convention**: both files mirror the same `<repo>-<feature>` slug
   (`prd-<repo>-<feature>.md` / `adr-<repo>-<feature>.md`) so they are easy to pair.
-- **Language**: all document content is written in English, regardless of the input language.
+- **Language**: all document content is written in English, regardless of input language.
   Only the `**Original prompt:**` line carries the (translated) original wording.
 - **No emojis** in any generated document.
 - **Overwrite safety**: if either target file already exists, confirm with the user before

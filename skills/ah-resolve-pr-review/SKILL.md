@@ -6,11 +6,11 @@ argument-hint: "PR number or URL (e.g., 47, #47, https://github.com/owner/repo/p
 
 # Resolve Unresolved PR Conversations
 
-Resolve unresolved review conversations on a pull request by reading each comment, understanding the reviewer's intent, and creating a fix plan. The plan is presented to the user for approval before any code changes are made. After approval, implements the approved fixes, replies to each thread explaining what was done, and marks threads as resolved on GitHub. Uses the full PR context, the linked GitHub issue, and the existing codebase structure to produce clean, idiomatic fixes.
+Resolve unresolved review threads on a PR. Read each comment, grasp reviewer intent, build fix plan. Present plan to user for approval before any code change. After approval: implement fixes, reply to each thread explaining what was done, mark threads resolved on GitHub. Use full PR context, linked issue, existing codebase for clean idiomatic fixes.
 
 ## Input
 
-- **PR number or URL** (optional): Accepts `123`, `#123`, or full URL. If omitted, the script auto-detects the PR from the current git branch.
+- **PR number or URL** (optional): accepts `123`, `#123`, full URL. If omitted, script auto-detects PR from current branch.
 
 ## Procedure
 
@@ -24,14 +24,14 @@ mkdir -p "${PLANS_DIR}"
 
 ### 1. Checkout PR Branch and Fetch Data
 
-Before doing anything, save the current branch and stash state so they can be restored later:
+First, save current branch and stash state for later restore:
 
 ```bash
 ORIGINAL_BRANCH=$(git branch --show-current)
 STASH_MSG="ah-resolve-pr-review: auto-stash before checkout"
 ```
 
-**If the user provided a specific PR number or URL**, checkout that branch:
+**If user provided specific PR number or URL**, checkout that branch:
 
 ```bash
 # Stash uncommitted changes before switching branches
@@ -45,22 +45,22 @@ if ! gh pr checkout <PR_NUMBER>; then
 fi
 ```
 
-**If no PR was specified**, the current branch is assumed to be the PR branch. No checkout or stash is needed.
+**If no PR specified**, current branch is the PR branch. No checkout or stash needed.
 
-Then run the fetch script (resolve the path relative to this SKILL.md's directory). It writes the full data bundle to a file and prints only a compact summary:
+Then run fetch script (resolve path relative to this SKILL.md's directory). Writes full data bundle to file, prints only compact summary:
 
 ```bash
 python3 <skill_dir>/scripts/fetch_pr_data.py /tmp/pr_data.json
 ```
 
-If the script fails with an auth error, stop and ask the user to run `gh auth login`.
+If script fails with auth error, stop and ask user to run `gh auth login`.
 
-**stdout** is a bounded summary only -- read it directly: PR number/title/state/url, the branch pair, counts (files, threads with unresolved/resolved breakdown, reviews, comments, linked issues), and an index of unresolved threads (`path:line [outdated] :: <truncated first comment>`). Use this to drive validation (step 2) and to plan which threads to fix, **without** loading the heavy bundle into context.
+**stdout** is bounded summary only -- read it directly: PR number/title/state/url, branch pair, counts (files, threads with unresolved/resolved breakdown, reviews, comments, linked issues), index of unresolved threads (`path:line [outdated] :: <truncated first comment>`). Drives validation (step 2) and thread-fix planning **without** loading heavy bundle into context.
 
-**The full JSON file** (`/tmp/pr_data.json`) holds the complete, unchanged data. Read from it selectively with `jq` only for the threads you actually fix -- never `cat` the whole file (it contains the full diff and every `diffHunk`). The file shape:
+**Full JSON file** (`/tmp/pr_data.json`) holds complete unchanged data. Read selectively with `jq` only for threads you fix -- never `cat` whole file (contains full diff and every `diffHunk`). File shape:
 
 - `pull_request` -- metadata: `number`, `title`, `body`, `url`, `state`, `base_branch`, `head_branch`, `files`, `owner`, `repo`
-- `diff` -- full PR diff as a string (read per-file on demand: `jq -r .diff` or prefer `gh pr diff <PR> -- <path>`)
+- `diff` -- full PR diff string (read per-file on demand: `jq -r .diff` or prefer `gh pr diff <PR> -- <path>`)
 - `review_threads` -- object with `total`, `unresolved_count`, `resolved_count`, `unresolved` (array of thread objects), `resolved`
   - Thread fields: `id` (GraphQL node ID for resolve mutation), `isResolved`, `isOutdated`, `subjectType` (`LINE` or `FILE`), `path`, `line`, `startLine`, `diffSide`, `startDiffSide`, `originalLine`, `originalStartLine`, `resolvedBy`
   - Comment fields: `id` (GraphQL node ID), `databaseId` (numeric -- use for REST API replies), `body`, `diffHunk`, `createdAt`, `updatedAt`, `author`, `path`, `originalPosition`
@@ -68,107 +68,107 @@ If the script fails with an auth error, stop and ask the user to run `gh auth lo
 - `conversation_comments` -- simplified issue comments
 - `linked_issues` -- full details of linked issues
 
-Example -- pull just the unresolved threads (no diff, no resolved) when you reach step 4:
+Example -- pull just unresolved threads (no diff, no resolved) at step 4:
 
 ```bash
 jq '.review_threads.unresolved' /tmp/pr_data.json
 ```
 
-Set `PR_NUMBER` for use in later steps. If the user provided a PR number or URL as input, use that value. Otherwise, take it from the summary's `PR #<n>` header (or `jq -r .pull_request.number /tmp/pr_data.json`).
+Set `PR_NUMBER` for later steps. If user provided PR number/URL, use that. Otherwise take from summary's `PR #<n>` header (or `jq -r .pull_request.number /tmp/pr_data.json`).
 
 ### 2. Validate PR State
 
-Check `pull_request.state`. If it is not `OPEN`, abort and inform the user that only open PRs can be resolved.
+Check `pull_request.state`. If not `OPEN`, abort and inform user that only open PRs can be resolved.
 
-If `review_threads.unresolved_count` is `0`, inform the user that there are no unresolved conversations and stop.
+If `review_threads.unresolved_count` is `0`, inform user there are no unresolved conversations and stop.
 
 ### 3. Scan Codebase Structure
 
-Before implementing fixes, build a mental model of the codebase so fixes reuse existing patterns rather than introducing duplicates.
+Before fixes, build mental model of codebase so fixes reuse existing patterns rather than duplicate.
 
-Discover the project layout by checking which directories exist at the project root -- do not assume any specific structure like `src/`. Common layouts include:
+Discover project layout by checking which directories exist at project root -- do not assume structure like `src/`. Common layouts:
 
 - `src/`, `app/`, `lib/`, `packages/`, `modules/`
 - Monorepo workspaces: check `package.json` `workspaces` field or `pnpm-workspace.yaml`
 - Framework-specific: `pages/`, `routes/`, `api/`, `server/`, `client/`
 
-Focus the scan on directories related to the files referenced in the unresolved threads. For each file touched by an unresolved conversation:
+Focus scan on directories tied to files in unresolved threads. For each file touched by an unresolved conversation:
 
-1. Read the file itself and its surrounding module (sibling files, index exports)
-2. Identify nearby utilities, hooks, types, constants, and shared functions
-3. Check for project-wide conventions: formatting config, linting rules, import aliases
+1. Read file itself and surrounding module (sibling files, index exports)
+2. Identify nearby utilities, hooks, types, constants, shared functions
+3. Check project-wide conventions: formatting config, linting rules, import aliases
 
-Read key config files relevant to the changes (`package.json`, `tsconfig.json`, etc.). This informs whether existing utilities, hooks, components, CSS classes, or shared functions should be reused in fixes instead of writing new code.
+Read key config files relevant to changes (`package.json`, `tsconfig.json`, etc.). Informs whether existing utilities, hooks, components, CSS classes, or shared functions should be reused instead of writing new code.
 
 ### 4. Analyze Unresolved Conversations
 
-Group the unresolved threads by `path` (file) so each file is read once and all related threads are processed together. This avoids redundant file reads and helps maintain consistency across fixes in the same file.
+Group unresolved threads by `path` (file) so each file is read once and all related threads processed together. Avoids redundant reads, keeps consistency across same-file fixes.
 
-For each file group, read the file once, then process each thread in the group.
+For each file group, read file once, then process each thread in group.
 
-**File-level threads** (`subjectType` is `FILE`): These comments apply to the file as a whole, not a specific line. The `line` and `startLine` fields will be `null`. Skip the line-location logic in step 4a and treat the entire file as the context. The reviewer's comment body is the sole guide for what needs to change.
+**File-level threads** (`subjectType` is `FILE`): comments apply to whole file, not a specific line. `line` and `startLine` are `null`. Skip line-location logic in step 4a; treat entire file as context. Reviewer's comment body is sole guide.
 
 #### 4a. Check if Thread is Outdated
 
-If `isOutdated` is `true`, the thread references code that has since changed. The `line`/`startLine` values may no longer match the current file content:
+If `isOutdated` is `true`, thread references code that since changed. `line`/`startLine` may no longer match current file:
 
-1. Read the current version of the file from the working tree.
-2. Use the thread's `diffHunk` and comment context to locate the relevant code -- search for the code patterns mentioned rather than relying on original line numbers.
-3. If the referenced code no longer exists or has already been changed to address the concern, record the thread as `Already addressed` with the reason.
-4. If the referenced code still exists at a different location, proceed with the fix using the updated location.
+1. Read current version of file from working tree.
+2. Use thread's `diffHunk` and comment context to locate relevant code -- search for code patterns mentioned rather than original line numbers.
+3. If referenced code no longer exists or was already changed to address concern, record thread as `Already addressed` with reason.
+4. If referenced code still exists at different location, proceed with fix using updated location.
 
 #### 4b. Understand the Reviewer's Intent
 
-Read the full thread (all comments and replies). Determine:
+Read full thread (all comments and replies). Determine:
 
-- What is the reviewer asking for? (bug fix, refactor, style change, logic change, performance improvement, etc.)
-- Is there a specific suggestion? (GitHub suggestion block, code snippet, or verbal description)
-- Does the request conflict with the linked issue requirements?
-- In threads with multiple replies, the most recent comment from the reviewer typically represents their final position.
+- What is reviewer asking for? (bug fix, refactor, style change, logic change, performance improvement, etc.)
+- Specific suggestion? (GitHub suggestion block, code snippet, verbal description)
+- Does request conflict with linked issue requirements?
+- In multi-reply threads, most recent reviewer comment typically represents final position.
 
 #### 4c. Assess Feasibility
 
-**Fixable** -- the request is clear, the change is within scope, and sufficient information exists to implement it correctly.
+**Fixable** -- request clear, change within scope, enough info to implement correctly.
 
 **Not fixable** -- common reasons:
 
 - Missing information: ambiguous comment or question without direction
-- Out of scope: change requires modifying code unrelated to the PR
-- Conflicting requirements: contradicts the linked issue
-- External dependency: fix requires changes in another repository or service
+- Out of scope: change requires modifying code unrelated to PR
+- Conflicting requirements: contradicts linked issue
+- External dependency: fix requires changes in another repo or service
 - Needs discussion: design question requiring team consensus
 
 #### 4d. Plan the Fix (if fixable)
 
-Do NOT implement any changes yet. Instead, create a detailed fix plan for each fixable thread:
+Do NOT implement yet. Create detailed fix plan per fixable thread:
 
-- **Describe the change**: What exactly will be modified, added, or removed.
-- **Specify the location**: File path, line range, and surrounding context.
-- **Reference existing code**: Note any utilities, hooks, components, or patterns from the codebase that will be reused.
-- **Estimate impact**: List any other files or tests that may be affected by the change.
-- **Note GitHub suggestions**: If the reviewer left a `suggestion` block, include it verbatim in the plan.
+- **Describe the change**: what exactly modified, added, or removed.
+- **Specify the location**: file path, line range, surrounding context.
+- **Reference existing code**: utilities, hooks, components, patterns from codebase to reuse.
+- **Estimate impact**: other files or tests affected by change.
+- **Note GitHub suggestions**: if reviewer left a `suggestion` block, include verbatim in plan.
 
 #### 4e. Record the Analysis
 
-For each thread, record:
+Per thread, record:
 
-- Thread ID (`id` from GraphQL -- this is the node ID needed for the resolve mutation)
+- Thread ID (`id` from GraphQL -- node ID for resolve mutation)
 - File path and line reference
 - Reviewer's request (one-sentence summary)
 - Assessment: `Fixable`, `Not fixable`, or `Already addressed`
-- Planned fix (for fixable items) or reason (for non-fixable items)
+- Planned fix (fixable items) or reason (non-fixable items)
 
 ### 5. Present Fix Plan for Approval
 
 #### 5a. Save Plan to File
 
-Assemble the plan file path:
+Assemble plan file path:
 
 ```bash
 PLAN_FILE="${PLANS_DIR}/plan-resolve-pr-review-${REPO_NAME}-${PR_NUMBER}.md"
 ```
 
-Write the complete fix plan to `${PLAN_FILE}` using this format:
+Write complete fix plan to `${PLAN_FILE}` using this format:
 
 ```markdown
 ## Fix Plan: PR #<number>
@@ -189,7 +189,7 @@ Write the complete fix plan to `${PLAN_FILE}` using this format:
 | 3 | `src/api.ts` | 30 | @reviewer | Unclear naming suggestion | Question without clear direction; needs clarification |
 ```
 
-Display only a link to the file in chat:
+Display only a link to file in chat:
 
 ```
 Plan saved to: ${PLAN_FILE}
@@ -197,60 +197,60 @@ Plan saved to: ${PLAN_FILE}
 
 #### 5b. Validate Plan
 
-Spawn a **plan-validator** subagent (Opus, low) with the following instructions:
+Spawn a **plan-validator** subagent (Opus, low) with these instructions:
 
-1. Read the plan file at `${PLAN_FILE}`
-2. Collect relevant `AGENTS.md` files: for each file path referenced in the plan, walk up from that file's directory to the repository root, collecting any `AGENTS.md` found along the way. Deduplicate the results (the root `AGENTS.md` will appear for every path).
+1. Read plan file at `${PLAN_FILE}`
+2. Collect relevant `AGENTS.md` files: for each file path in plan, walk up from that file's directory to repo root, collecting any `AGENTS.md` found. Deduplicate (root `AGENTS.md` appears for every path).
 3. Read each collected `AGENTS.md` file
-4. Review the plan for:
+4. Review plan for:
    - Errors (incorrect file paths, wrong line references, invalid thread IDs)
    - Inconsistencies (conflicting planned changes, duplicate entries)
    - Missing or ambiguous information (vague planned changes, missing context)
    - Logical problems (fixes that contradict each other or the linked issue)
-   - Violations of any rules or conventions found in `AGENTS.md` files
-5. Return a structured list of findings with the fix number and description of each issue, or confirm that no issues were found
+   - Violations of any rules or conventions in `AGENTS.md` files
+5. Return structured list of findings with fix number and description of each issue, or confirm no issues found
 
 #### 5c. Fix Validation Issues
 
-After the validator subagent returns, review its findings:
+After validator returns, review findings:
 
-- If issues were found, update `${PLAN_FILE}` to correct them before proceeding.
-- If no issues were found, proceed directly to approval.
+- If issues found, update `${PLAN_FILE}` to correct them before proceeding.
+- If no issues, proceed directly to approval.
 
 #### 5d. Ask for Approval
 
-Use the **AskUserQuestion** tool to ask the user for approval:
+Use **AskUserQuestion** tool to ask user for approval:
 
-- Reference the plan file path (`${PLAN_FILE}`)
+- Reference plan file path (`${PLAN_FILE}`)
 - Ask: "Do you approve this fix plan? You can approve all, reject all, or specify which fixes to skip by number (e.g., 'approve all except #2')."
-- Wait for the user's response before proceeding.
+- Wait for user response before proceeding.
 
-Handle the user's response:
+Handle response:
 
-- **Approve all**: Proceed to step 6 with all fixable threads.
-- **Approve with exclusions**: Remove the excluded fixes from the implementation list and proceed with the rest.
-- **Reject all**: Skip to step 9 (Report) and present only the analysis without any code changes.
-- **Request changes to the plan**: Update `${PLAN_FILE}` based on the user's feedback and present it again for approval.
+- **Approve all**: proceed to step 6 with all fixable threads.
+- **Approve with exclusions**: remove excluded fixes from implementation list, proceed with rest.
+- **Reject all**: skip to step 9 (Report), present only analysis without code changes.
+- **Request changes to plan**: update `${PLAN_FILE}` per feedback, present again for approval.
 
 ### 6. Implement Approved Fixes
 
-Apply only the fixes that were approved by the user in step 5. For each approved fix:
+Apply only fixes approved by user in step 5. Per approved fix:
 
-- **Reuse existing code**: Use utilities, hooks, components, constants already in the codebase. Search before writing new code.
-- **Match project conventions**: Follow coding style, naming conventions, and patterns established in the project.
-- **Keep changes minimal**: Only change what the reviewer requested. Do not refactor surrounding code.
-- **Preserve behavior**: Do not break existing functionality or tests.
-- **Apply GitHub suggestions verbatim**: If the reviewer left a `suggestion` block, apply it exactly unless it introduces a bug or violates project conventions.
+- **Reuse existing code**: use utilities, hooks, components, constants already in codebase. Search before writing new code.
+- **Match project conventions**: follow coding style, naming, patterns established in project.
+- **Keep changes minimal**: change only what reviewer requested. Do not refactor surrounding code.
+- **Preserve behavior**: do not break existing functionality or tests.
+- **Apply GitHub suggestions verbatim**: if reviewer left a `suggestion` block, apply exactly unless it introduces a bug or violates project conventions.
 
-After implementing each fix, update its status from `Fixable` to `Fixed` or `Partially fixed`.
+After each fix, update status from `Fixable` to `Fixed` or `Partially fixed`.
 
 ### 7. Verify Changes
 
-After processing all conversations, verify the changes are sound.
+After processing all conversations, verify changes are sound.
 
-Read `package.json` to find available verification scripts. Determine the package manager by checking for lock files (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lockb`).
+Read `package.json` for available verification scripts. Determine package manager by lock files (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `bun.lockb`).
 
-Run only scripts that exist in `package.json`. Check for these common script names in order of preference:
+Run only scripts that exist in `package.json`. Check these common script names in order of preference:
 
 - **Preflight** (runs multiple checks): `preflight`
 - **Type checking**: `typecheck`, `type-check`, `tsc`
@@ -258,17 +258,17 @@ Run only scripts that exist in `package.json`. Check for these common script nam
 - **Tests**: `test`, `test:unit`
 - **Build**: `build`, `preflight:build`
 
-If no verification scripts are found, note this in the report and skip verification. Do not silently assume verification passed.
+If no verification scripts found, note in report and skip verification. Do not silently assume verification passed.
 
-If verification fails, determine which fix caused the failure. Fix the regression if possible. If a fix cannot be corrected without introducing new issues, revert it and update the thread's outcome to `Not fixable` with the reason (e.g., "Fix caused type error; reverted").
+If verification fails, determine which fix caused failure. Fix regression if possible. If a fix cannot be corrected without new issues, revert it and update thread outcome to `Not fixable` with reason (e.g., "Fix caused type error; reverted").
 
 ### 8. Reply to Threads and Resolve on GitHub
 
-For each thread that was `Fixed` or `Already addressed`, post a reply and resolve it on GitHub. This closes the feedback loop for the reviewer.
+For each thread `Fixed` or `Already addressed`, post reply and resolve on GitHub. Closes feedback loop for reviewer.
 
 #### 8a. Reply to the Thread
 
-Post a concise reply explaining what was done. Use the first comment's `databaseId` (numeric ID) from the thread to reply -- do not use the GraphQL node `id`:
+Post concise reply explaining what was done. Use first comment's `databaseId` (numeric ID) from thread -- do not use GraphQL node `id`:
 
 ```bash
 gh api repos/<owner>/<repo>/pulls/<pr_number>/comments/<database_id>/replies \
@@ -277,14 +277,14 @@ gh api repos/<owner>/<repo>/pulls/<pr_number>/comments/<database_id>/replies \
 
 Reply format by outcome:
 
-- **Fixed**: Describe what was changed in 1-2 sentences. Example: "Added input validation using the existing `validateInput()` from `utils/validation.ts`."
-- **Already addressed**: Explain that the code has changed since the review. Example: "This was already addressed in a subsequent commit -- the function now uses the pattern you suggested."
+- **Fixed**: describe what changed in 1-2 sentences. Example: "Added input validation using the existing `validateInput()` from `utils/validation.ts`."
+- **Already addressed**: explain code changed since review. Example: "This was already addressed in a subsequent commit -- the function now uses the pattern you suggested."
 
 Do not reply to `Not fixable` or `Partially fixed` threads -- those need human follow-up.
 
 #### 8b. Resolve the Thread
 
-After replying, resolve the thread using its GraphQL node ID (the `id` field from the review thread data):
+After replying, resolve thread using its GraphQL node ID (the `id` field from review thread data):
 
 ```bash
 gh api graphql -f query='
@@ -296,11 +296,11 @@ gh api graphql -f query='
 ' -f threadId="<thread_id>"
 ```
 
-If the resolve mutation fails (e.g., permissions), log the failure but do not abort. The reply is still valuable even if auto-resolve is not possible.
+If resolve mutation fails (e.g., permissions), log failure but do not abort. Reply is still valuable even if auto-resolve not possible.
 
 ### 9. Report to User
 
-Present a summary using the PR metadata from the JSON output:
+Present summary using PR metadata from JSON output:
 
 ```markdown
 ## PR Review Resolution: #<number>
@@ -330,19 +330,19 @@ List threads that were replied to and resolved via the API. If any resolve mutat
 
 ### 10. Prompt User for Next Steps
 
-After presenting the report, ask the user:
+After report, ask user:
 
-- Whether to commit the changes (if any fixes were applied)
-- Whether to push to the PR branch
+- Whether to commit changes (if any fixes applied)
+- Whether to push to PR branch
 - Whether any "Not fixable" items need further discussion
 
-Do not commit or push automatically -- wait for the user's decision.
+Do not commit or push automatically -- wait for user's decision.
 
 ### 11. Restore Working Tree
 
-**Only if a branch checkout was performed in Step 1** (i.e., the user provided a specific PR number/URL and the original branch was different). If the current branch was already the PR branch, skip this step.
+**Only if a branch checkout was performed in Step 1** (i.e., user provided specific PR number/URL and original branch differed). If current branch was already PR branch, skip this step.
 
-After the user has made their decision (or if the process is aborted):
+After user decides (or if process aborted):
 
 ```bash
 git checkout "${ORIGINAL_BRANCH}"
@@ -357,15 +357,15 @@ if [ -n "$STASH_INDEX" ]; then
 fi
 ```
 
-If `git stash pop` fails due to merge conflicts, inform the user and preserve the stash for manual resolution.
+If `git stash pop` fails due to merge conflicts, inform user and preserve stash for manual resolution.
 
-Skip this step entirely if the user chose to stay on the PR branch.
+Skip this step entirely if user chose to stay on PR branch.
 
 ## Important Notes
 
-- Only process **unresolved** threads. Resolved conversations require no action.
-- The linked GitHub issue provides the "why" behind the PR. Use it to judge whether feedback aligns with or contradicts the original requirements.
-- Prefer reusing existing codebase utilities over writing new helpers. Search the project before creating new code.
-- When a thread has multiple replies, the most recent comment from the reviewer typically represents their final position.
-- Never fabricate fixes or pretend a conversation is resolved when the underlying issue was not addressed.
-- Always restore the original branch state when done (if a checkout was performed). If stash pop fails, inform the user and preserve the stash.
+- Process only **unresolved** threads. Resolved conversations need no action.
+- Linked GitHub issue provides the "why" behind PR. Use it to judge whether feedback aligns with or contradicts original requirements.
+- Prefer reusing existing codebase utilities over new helpers. Search project before creating new code.
+- When thread has multiple replies, most recent reviewer comment typically represents final position.
+- Never fabricate fixes or pretend a conversation is resolved when underlying issue was not addressed.
+- Always restore original branch state when done (if checkout was performed). If stash pop fails, inform user and preserve stash.

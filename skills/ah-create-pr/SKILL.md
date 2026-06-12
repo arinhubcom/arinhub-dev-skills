@@ -6,13 +6,13 @@ argument-hint: "base branch, issue number, labels"
 
 # Create or Update GitHub Pull Request
 
-Analyze the current branch and create or update a well-structured GitHub Pull Request. If an open PR already exists for the current branch, it is updated instead of creating a duplicate. The diff against the base branch is the single source of truth for all PR content.
+Analyze current branch and create or update a well-structured GitHub Pull Request. If an open PR already exists for the current branch, update it instead of creating a duplicate. The diff against the base branch is the single source of truth for all PR content.
 
 ## Input
 
-- **Base branch** (REQUIRED): The target branch this PR will merge into (e.g., `main`, `develop`). If the user did not provide it, STOP and ask before proceeding. Never assume or default to any branch.
-- **Issue number** (optional): The GitHub issue number this PR addresses (e.g., `42`, `#42`). If not provided by the user, do not attempt to infer it from the branch name -- simply omit issue references from the PR.
-- **Labels** (optional): Comma-separated list of labels to apply to the PR (e.g., `bug,urgent`, `feature,frontend`). If not provided by the user, auto-detect labels in step 2.
+- **Base branch** (REQUIRED): target branch this PR merges into (e.g., `main`, `develop`). If the user did not provide it, STOP and ask before proceeding. Never assume or default to any branch.
+- **Issue number** (optional): GitHub issue number this PR addresses (e.g., `42`, `#42`). If not provided by the user, do not infer it from the branch name -- omit issue references from the PR.
+- **Labels** (optional): comma-separated labels to apply (e.g., `bug,urgent`, `feature,frontend`). If not provided by the user, auto-detect labels in step 2.
 - Current Git branch with unmerged commits
 - Git diff against the base branch
 
@@ -72,7 +72,7 @@ EXISTING_PR_URL=$(echo "${EXISTING_PR}" | jq -r '.url // empty')
 EXISTING_PR_BASE=$(echo "${EXISTING_PR}" | jq -r '.baseRefName // empty')
 ```
 
-If an open PR already exists for the current branch, the skill will update it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing.
+If an open PR already exists for the current branch, the skill updates it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing.
 
 If the user provided an issue number, use it for the PR references. Do not infer issue numbers from the branch name or commit messages.
 
@@ -90,7 +90,7 @@ If the user provided labels, use them as-is. Otherwise, auto-detect labels by an
    ```bash
    gh label list --limit 100 --json name,description
    ```
-2. **Match labels** based on the PR content:
+2. **Match labels** based on PR content:
    - **PR title type** -- map the commit type (`feat`, `fix`, `refactor`, `docs`, `test`, `perf`, `chore`) to matching labels (e.g., `feat` -> `feature`/`enhancement`, `fix` -> `bug`/`bugfix`, `docs` -> `documentation`)
    - **Changed file paths** -- infer domain labels from directories (e.g., changes in `apps/app-name/` -> `app-name`, changes in `src/api/` -> `api`/`backend`, changes in `src/components/` -> `frontend`/`ui`, changes in `infra/` -> `infrastructure`)
    - **Diff content** -- detect patterns like security fixes, dependency updates, breaking changes, and match to corresponding labels
@@ -179,8 +179,8 @@ Before submitting the PR, verify:
 ## Error Handling
 
 - If no base branch was provided, STOP and ask the user for it
-- If no commits exist ahead of the base branch, abort and inform user
-- If diff is empty, check for unstaged changes and prompt user
+- If no commits exist ahead of the base branch, abort and inform the user
+- If diff is empty, check for unstaged changes and prompt the user
 - If an existing open PR targets a different base branch than the user provided, warn the user and ask whether to update the existing PR's base or create a new PR
 
 ## Best Practices
