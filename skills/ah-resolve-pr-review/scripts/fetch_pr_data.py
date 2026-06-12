@@ -26,12 +26,22 @@ after ref resolution. The combined GraphQL query also draws from a single
 
 The output JSON shape is identical to the previous implementation.
 
+Token optimization
+------------------
+The full JSON bundle (including the unbounded `diff` and every thread's
+`diffHunk`) is written to a file rather than printed to stdout, so it does
+not flood the caller's context. Only a compact, bounded summary is printed
+to stdout: PR metadata, counts, and an index of unresolved threads
+(`path:line` + a truncated first-comment preview). The caller reads the
+full file selectively (e.g. `jq`) only for the threads it actually fixes.
+The file's JSON shape is unchanged from before.
+
 Requires:
   - `gh auth login` already set up
   - current branch has an associated (open) PR
 
 Usage:
-  python fetch_pr_data.py > pr_data.json
+  python fetch_pr_data.py [output_path]   # default: pr_data.json
 """
 
 from __future__ import annotations
@@ -371,9 +381,55 @@ def collect_linked_issues(
 
 
 # ---------------------------------------------------------------------------
+# Compact stdout summary (keeps the heavy bundle out of the caller's context)
+# ---------------------------------------------------------------------------
+_PREVIEW_CHARS = 200
+
+
+def _first_comment_preview(thread: dict[str, Any]) -> str:
+    """First comment body of a thread, collapsed to one truncated line."""
+    nodes = (thread.get("comments") or {}).get("nodes") or []
+    if not nodes:
+        return ""
+    body = " ".join((nodes[0].get("body") or "").split())
+    return body[:_PREVIEW_CHARS] + ("..." if len(body) > _PREVIEW_CHARS else "")
+
+
+def build_summary(result: dict[str, Any], output_path: str) -> str:
+    """Render a bounded, human/LLM-readable summary of the full bundle."""
+    pr = result["pull_request"]
+    rt = result["review_threads"]
+    lines: list[str] = [
+        f"PR #{pr['number']} [{pr['state']}] {pr['title']}",
+        f"  {pr['url']}",
+        f"  {pr['base_branch']} <- {pr['head_branch']}",
+        (
+            f"  files={len(pr['files'])} "
+            f"threads={rt['total']} (unresolved={rt['unresolved_count']}, "
+            f"resolved={rt['resolved_count']}) "
+            f"reviews={len(result['reviews'])} "
+            f"comments={len(result['conversation_comments'])} "
+            f"linked_issues={len(result['linked_issues'])}"
+        ),
+        f"  full JSON written to: {output_path}",
+    ]
+    if rt["unresolved"]:
+        lines.append("")
+        lines.append("Unresolved threads:")
+        for t in rt["unresolved"]:
+            loc = t.get("path") or "(file)"
+            if t.get("line") is not None:
+                loc += f":{t['line']}"
+            flags = " [outdated]" if t.get("isOutdated") else ""
+            lines.append(f"  - {loc}{flags} :: {_first_comment_preview(t)}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
+    output_path = sys.argv[1] if len(sys.argv) > 1 else "pr_data.json"
     owner, repo, pr_number = get_current_pr_ref()
     print(f"Fetching data for {owner}/{repo}#{pr_number} ...", file=sys.stderr)
 
@@ -436,7 +492,12 @@ def main() -> None:
         "linked_issues": linked_issues,
     }
 
-    print(json.dumps(result, indent=2))
+    # Write the full, unchanged bundle to a file (compact: no indent), and
+    # print only a bounded summary to stdout so the caller's context stays small.
+    with open(output_path, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, separators=(",", ":"))
+
+    print(build_summary(result, output_path))
 
 
 if __name__ == "__main__":

@@ -52,9 +52,12 @@ CURRENT_BRANCH=$(git branch --show-current)
 git fetch origin "${BASE_BRANCH}" --quiet
 MERGE_BASE=$(git merge-base "origin/${BASE_BRANCH}" HEAD)
 
-# Full diff against merge base (primary source of truth)
+# Diff against merge base. Lead with --stat (cheap summary); write the full diff
+# to a file instead of into context, and read hunks from it only as needed.
 git diff "${MERGE_BASE}" --stat
-DIFF=$(git diff "${MERGE_BASE}")
+DIFF_FILE=$(mktemp /tmp/pr-diff.XXXXXX.patch)
+git diff "${MERGE_BASE}" > "${DIFF_FILE}"
+echo "Full diff: ${DIFF_FILE} ($(wc -l < "${DIFF_FILE}") lines)"
 
 # Commit history on this branch
 git log "${MERGE_BASE}"..HEAD --no-decorate

@@ -137,7 +137,9 @@ newsletter popups, onboarding modals). These interfere with screenshots and inte
 tests:
 
 ```bash
-# Take a snapshot to identify overlay elements
+# Verbose snapshot here -- fixed-position/backdrop detail helps spot overlays.
+# Elsewhere prefer plain `take_snapshot` (default); add `--verbose true` only when
+# you specifically need the full a11y tree, since verbose output is large.
 chrome-devtools take_snapshot --verbose true
 # Look for common patterns: cookie consent, modal backdrops, dialog elements
 # If found, dismiss by clicking accept/close/dismiss buttons
@@ -167,7 +169,7 @@ For each discovered route (respecting the priority order from Step 1):
 ```bash
 chrome-devtools navigate_page --url "${ROUTE_URL}"
 chrome-devtools wait_for --event networkIdle --timeout 10000
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 ```
 
 Review the a11y snapshot for structural issues:
@@ -184,7 +186,7 @@ Capture at three breakpoints and check for layout issues at each:
 # Mobile
 chrome-devtools resize_page 375 812
 chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-mobile-${ROUTE_SLUG}.png"
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 
 # Tablet
 chrome-devtools resize_page 768 1024
@@ -229,14 +231,19 @@ Read `scripts/visual-audit.js` and inject it:
 chrome-devtools evaluate_script "<visual-audit.js content>"
 ```
 
-The script returns a JSON array of issues found (broken images, text overflow,
-elements outside viewport, empty visible containers). Record all findings.
+The script returns JSON `{ summary, issues }` (broken images, text overflow,
+elements outside viewport, empty visible containers). `summary` has true counts
+(`total`, `byType`, `bySeverity`, `truncated`); `issues` is capped at 50, sorted
+severity-first. Use `summary` for the tallies and `issues` for specifics --
+record all findings.
 
 #### 5f. Console and Network Errors
 
 ```bash
 chrome-devtools list_console_messages --types error,warning --pageSize 50
-chrome-devtools list_network_requests
+# Only the failed/slow requests matter below -- cap the page so a chatty route
+# does not flood context. Filter to error statuses where supported.
+chrome-devtools list_network_requests --pageSize 30
 ```
 
 From network requests, identify:
@@ -355,7 +362,7 @@ Multi-step flow testing to verify pages work end-to-end.
 ```bash
 # Start from homepage
 chrome-devtools navigate_page --url "${BASE_URL}"
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 
 # Identify navigation links from the a11y snapshot
 # Click through main navigation items using their UIDs
@@ -364,7 +371,7 @@ chrome-devtools click "<nav_link_uid>" --includeSnapshot true
 
 # Test back navigation
 chrome-devtools navigate_page --url "back"
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 # Verify returned to previous page
 ```
 
@@ -375,7 +382,7 @@ listing -> detail, or dashboard -> settings). Navigate through it:
 
 ```bash
 chrome-devtools navigate_page --url "${BASE_URL}"
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 
 # Navigate to first discovered sub-route via link click
 chrome-devtools click "<link_uid>" --includeSnapshot true
@@ -399,7 +406,7 @@ chrome-devtools click "<filter_uid>" --includeSnapshot true
 
 # Reload the page
 chrome-devtools navigate_page --url "reload"
-chrome-devtools take_snapshot --verbose true
+chrome-devtools take_snapshot
 # Compare: did the state persist (URL params, visible selections)?
 ```
 

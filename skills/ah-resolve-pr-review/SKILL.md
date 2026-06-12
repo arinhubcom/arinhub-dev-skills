@@ -47,18 +47,20 @@ fi
 
 **If no PR was specified**, the current branch is assumed to be the PR branch. No checkout or stash is needed.
 
-Then run the fetch script (resolve the path relative to this SKILL.md's directory):
+Then run the fetch script (resolve the path relative to this SKILL.md's directory). It writes the full data bundle to a file and prints only a compact summary:
 
 ```bash
-python3 <skill_dir>/scripts/fetch_pr_data.py
+python3 <skill_dir>/scripts/fetch_pr_data.py /tmp/pr_data.json
 ```
 
 If the script fails with an auth error, stop and ask the user to run `gh auth login`.
 
-The script outputs a JSON object containing:
+**stdout** is a bounded summary only -- read it directly: PR number/title/state/url, the branch pair, counts (files, threads with unresolved/resolved breakdown, reviews, comments, linked issues), and an index of unresolved threads (`path:line [outdated] :: <truncated first comment>`). Use this to drive validation (step 2) and to plan which threads to fix, **without** loading the heavy bundle into context.
+
+**The full JSON file** (`/tmp/pr_data.json`) holds the complete, unchanged data. Read from it selectively with `jq` only for the threads you actually fix -- never `cat` the whole file (it contains the full diff and every `diffHunk`). The file shape:
 
 - `pull_request` -- metadata: `number`, `title`, `body`, `url`, `state`, `base_branch`, `head_branch`, `files`, `owner`, `repo`
-- `diff` -- full PR diff as a string
+- `diff` -- full PR diff as a string (read per-file on demand: `jq -r .diff` or prefer `gh pr diff <PR> -- <path>`)
 - `review_threads` -- object with `total`, `unresolved_count`, `resolved_count`, `unresolved` (array of thread objects), `resolved`
   - Thread fields: `id` (GraphQL node ID for resolve mutation), `isResolved`, `isOutdated`, `subjectType` (`LINE` or `FILE`), `path`, `line`, `startLine`, `diffSide`, `startDiffSide`, `originalLine`, `originalStartLine`, `resolvedBy`
   - Comment fields: `id` (GraphQL node ID), `databaseId` (numeric -- use for REST API replies), `body`, `diffHunk`, `createdAt`, `updatedAt`, `author`, `path`, `originalPosition`
@@ -66,13 +68,13 @@ The script outputs a JSON object containing:
 - `conversation_comments` -- simplified issue comments
 - `linked_issues` -- full details of linked issues
 
-Store this JSON for use in subsequent steps. No additional API calls are needed for data collection.
-
-Set `PR_NUMBER` for use in later steps. If the user provided a PR number or URL as input, use that value. Otherwise, extract it from the JSON output:
+Example -- pull just the unresolved threads (no diff, no resolved) when you reach step 4:
 
 ```bash
-PR_NUMBER=<user-provided value or pull_request.number from JSON>
+jq '.review_threads.unresolved' /tmp/pr_data.json
 ```
+
+Set `PR_NUMBER` for use in later steps. If the user provided a PR number or URL as input, use that value. Otherwise, take it from the summary's `PR #<n>` header (or `jq -r .pull_request.number /tmp/pr_data.json`).
 
 ### 2. Validate PR State
 

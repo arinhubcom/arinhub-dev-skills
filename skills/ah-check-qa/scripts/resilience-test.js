@@ -338,12 +338,24 @@
   window.onunhandledrejection = originalOnUnhandled;
 
   // --- Compile results ---
-  results.capturedErrors = capturedErrors;
+  // Fuzzing tends to throw the identical error for many payloads, so dedupe by
+  // message and cap the list. The summary keeps the true total count.
+  const MAX_ERRORS = 20;
+  const seenErr = new Set();
+  const uniqueErrors = [];
+  for (const e of capturedErrors) {
+    if (seenErr.has(e.message)) continue;
+    seenErr.add(e.message);
+    uniqueErrors.push(e);
+  }
+  results.capturedErrors = uniqueErrors.slice(0, MAX_ERRORS);
   results.summary = {
     totalTests: results.tests.length,
     passed: results.tests.filter((t) => t.passed).length,
     failed: results.tests.filter((t) => !t.passed).length,
     totalJsErrors: capturedErrors.length,
+    uniqueJsErrors: uniqueErrors.length,
+    errorsTruncated: uniqueErrors.length > MAX_ERRORS,
   };
 
   return JSON.stringify(results);

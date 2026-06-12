@@ -1,14 +1,21 @@
 // Visual Audit Script
 // Inject via: chrome-devtools evaluate_script "<this script>"
-// Returns JSON array of visual issues found on the page.
+// Returns JSON { summary, issues } -- issues is capped (see MAX_ISSUES) and the
+// summary keeps the true totals so nothing is lost when the list is truncated.
 () => {
+  const MAX_ISSUES = 50;
   const issues = [];
   const seen = new Set();
+
+  // Compact rect: rounded {x,y,w,h} instead of rect.toJSON() (which duplicates
+  // top/right/bottom/left). Keeps each issue small in the caller's context.
+  const rectOf = (el) => compactRect(el.getBoundingClientRect());
+  const compactRect = (r) => ({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) });
 
   // Deduplication helper: prevents nested elements from reporting the same issue
   // multiple times. Uses issue type + element position as a fingerprint.
   const dedupe = (issue) => {
-    const key = `${issue.type}:${Math.round(issue.rect?.x || 0)},${Math.round(issue.rect?.y || 0)},${Math.round(issue.rect?.width || 0)}`;
+    const key = `${issue.type}:${issue.rect?.x || 0},${issue.rect?.y || 0},${issue.rect?.w || 0}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -27,7 +34,7 @@
         element: img.tagName,
         selector: img.src || img.getAttribute('data-src') || 'unknown',
         message: `Broken image: ${img.alt || img.src || 'no alt/src'}`,
-        rect: img.getBoundingClientRect().toJSON(),
+        rect: rectOf(img),
       });
     }
     if (!img.alt && !img.getAttribute('role')) {
@@ -37,7 +44,7 @@
         element: img.tagName,
         selector: img.src || 'unknown',
         message: `Image missing alt text: ${img.src}`,
-        rect: img.getBoundingClientRect().toJSON(),
+        rect: rectOf(img),
       });
     }
   });
@@ -56,7 +63,7 @@
           selector: el.className ? `.${el.className.split(' ')[0]}` : el.tagName.toLowerCase(),
           message: `Text overflows container (scrollWidth: ${el.scrollWidth}, clientWidth: ${el.clientWidth})`,
           text: el.textContent.trim().slice(0, 80),
-          rect: el.getBoundingClientRect().toJSON(),
+          rect: rectOf(el),
         });
       }
     }
@@ -77,7 +84,7 @@
         element: el.tagName,
         selector: el.textContent.trim().slice(0, 40) || el.className || el.tagName,
         message: `Interactive element outside viewport at (${Math.round(rect.left)}, ${Math.round(rect.top)})`,
-        rect: rect.toJSON(),
+        rect: compactRect(rect),
       });
     }
   });
@@ -109,7 +116,7 @@
         element: el.tagName,
         selector: el.className ? `.${el.className.split(' ')[0]}` : el.id ? `#${el.id}` : el.tagName.toLowerCase(),
         message: `Visible container with no content (${Math.round(rect.width)}x${Math.round(rect.height)})`,
-        rect: rect.toJSON(),
+        rect: compactRect(rect),
       });
     }
   });
@@ -128,7 +135,7 @@
         element: el.tagName,
         selector: el.className ? `.${el.className.split(' ')[0]}` : el.tagName.toLowerCase(),
         message: `Extremely high z-index: ${z}`,
-        rect: el.getBoundingClientRect().toJSON(),
+        rect: rectOf(el),
       });
     }
   });
@@ -151,5 +158,18 @@
     }
   });
 
-  return JSON.stringify(issues);
+  // Build bounded output: true counts in the summary, capped list of issues.
+  const rank = { critical: 0, warning: 1, info: 2 };
+  const byType = {};
+  const bySeverity = {};
+  for (const i of issues) {
+    byType[i.type] = (byType[i.type] || 0) + 1;
+    bySeverity[i.severity] = (bySeverity[i.severity] || 0) + 1;
+  }
+  const sorted = issues.slice().sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+
+  return JSON.stringify({
+    summary: { total: issues.length, byType, bySeverity, truncated: issues.length > MAX_ISSUES },
+    issues: sorted.slice(0, MAX_ISSUES),
+  });
 }

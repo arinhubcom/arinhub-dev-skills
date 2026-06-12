@@ -7,11 +7,16 @@
   const issues = [];
   const seen = new Set();
   const MIN_TOUCH_TARGET = 44; // WCAG 2.5.8 minimum
+  const MAX_ISSUES = 50;
+
+  // Compact rect: rounded {x,y,w,h} instead of rect.toJSON() (which duplicates
+  // top/right/bottom/left), keeping each issue small in the caller's context.
+  const compactRect = (r) => ({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) });
 
   // Deduplication: nested interactive elements (e.g., <a> wrapping <button>)
   // can trigger the same issue at the same position. Fingerprint by type + rect.
   const dedupe = (issue) => {
-    const key = `${issue.type}:${Math.round(issue.rect?.x || 0)},${Math.round(issue.rect?.y || 0)}`;
+    const key = `${issue.type}:${issue.rect?.x || 0},${issue.rect?.y || 0}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -69,7 +74,7 @@
         severity: 'critical',
         element: elementDesc,
         message: 'Interactive element has no accessible label',
-        rect: rect.toJSON(),
+        rect: compactRect(rect),
       });
     }
 
@@ -85,7 +90,7 @@
           severity: 'critical',
           element: elementDesc,
           message: 'Input has no associated label, aria-label, or aria-labelledby',
-          rect: rect.toJSON(),
+          rect: compactRect(rect),
         });
       }
     }
@@ -97,7 +102,7 @@
         severity: 'warning',
         element: elementDesc,
         message: `Touch target ${Math.round(rect.width)}x${Math.round(rect.height)}px is below ${MIN_TOUCH_TARGET}x${MIN_TOUCH_TARGET}px minimum`,
-        rect: rect.toJSON(),
+        rect: compactRect(rect),
       });
     }
 
@@ -108,7 +113,7 @@
         severity: 'critical',
         element: elementDesc,
         message: 'Interactive element has pointer-events: none',
-        rect: rect.toJSON(),
+        rect: compactRect(rect),
       });
     }
 
@@ -123,7 +128,7 @@
           severity: 'warning',
           element: elementDesc,
           message: `Element center is obscured by ${topEl.tagName.toLowerCase()}.${topEl.className?.split?.(' ')?.[0] || ''}`,
-          rect: rect.toJSON(),
+          rect: compactRect(rect),
         });
       }
     }
@@ -136,7 +141,7 @@
           severity: 'info',
           element: elementDesc,
           message: 'Disabled element lacks clear visual indication (normal opacity, no not-allowed cursor)',
-          rect: rect.toJSON(),
+          rect: compactRect(rect),
         });
       }
     }
@@ -150,7 +155,7 @@
           severity: 'warning',
           element: elementDesc,
           message: `Link has ${!href ? 'no href' : `href="${href}"`} -- should be a button if not a navigation link`,
-          rect: rect.toJSON(),
+          rect: compactRect(rect),
         });
       }
     }
@@ -164,22 +169,31 @@
           severity: 'info',
           element: elementDesc,
           message: 'Button inside form has no type attribute (defaults to "submit")',
-          rect: rect.toJSON(),
+          rect: compactRect(rect),
         });
       }
     }
   });
 
+  // Bounded output: keep true counts in the summary; sort by severity so the
+  // most important issues survive the cap, then slice.
+  const rank = { critical: 0, warning: 1, info: 2 };
+  const byType = {};
+  for (const i of issues) byType[i.type] = (byType[i.type] || 0) + 1;
+  const sorted = issues.slice().sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9));
+
   return JSON.stringify({
     summary: {
       totalChecked,
       totalIssues: issues.length,
+      truncated: issues.length > MAX_ISSUES,
+      byType,
       bySeverity: {
         critical: issues.filter((i) => i.severity === 'critical').length,
         warning: issues.filter((i) => i.severity === 'warning').length,
         info: issues.filter((i) => i.severity === 'info').length,
       },
     },
-    issues,
+    issues: sorted.slice(0, MAX_ISSUES),
   });
 }

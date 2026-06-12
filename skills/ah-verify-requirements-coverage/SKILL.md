@@ -175,27 +175,29 @@ If the issue body is vague or contains no clear requirements, use the issue titl
 
 ### 7. Fetch Diff
 
-**If a diff file path was provided as input**, read the diff from that file instead of fetching it. Skip the commands below and proceed to Step 8.
+Write the diff to a file and read from it on demand (per file/hunk) rather than loading the whole diff into context. Set `DIFF_FILE` so Step 8 can reference it.
+
+**If a diff file path was provided as input**, set `DIFF_FILE` to that path and skip the commands below.
 
 **If `MODE=remote`:**
 
-Get the full diff for the pull request:
-
 ```bash
-gh pr diff $PR_NUMBER
+DIFF_FILE=$(mktemp /tmp/req-diff.XXXXXX.patch)
+gh pr diff "$PR_NUMBER" > "${DIFF_FILE}"
+echo "Diff: ${DIFF_FILE} ($(wc -l < "${DIFF_FILE}") lines)"
 ```
-
-Also review the list of changed files from Step 3 to understand the scope of changes.
 
 **If `MODE=local`:**
 
 Diff from the merge base (resolved in Step 2) to the current working tree. This captures all changes on the feature branch — both committed and unstaged tracked changes — relative to the base branch. Note: untracked files (new files not yet `git add`-ed) are not included.
 
 ```bash
-git diff "${MERGE_BASE}"
+DIFF_FILE=$(mktemp /tmp/req-diff.XXXXXX.patch)
+git diff "${MERGE_BASE}" > "${DIFF_FILE}"
+echo "Diff: ${DIFF_FILE} ($(wc -l < "${DIFF_FILE}") lines)"
 ```
 
-Also review the list of changed files from Step 3 to understand the scope of changes.
+Use the changed-files list from Step 3 to understand scope, then read targeted hunks from `${DIFF_FILE}` as you analyze each requirement (e.g. `grep`/`git diff "${MERGE_BASE}" -- <path>`). For a large diff, scan per file rather than reading the whole patch at once.
 
 ### 8. Analyze Coverage
 
