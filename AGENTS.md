@@ -4,6 +4,16 @@
 
 File formatting is handled by Prettier on save. Do not manually fix formatting issues — they will be resolved automatically when the file is saved.
 
+## Keeping ARCHITECTURE.md current
+
+`ARCHITECTURE.md` documents the `ah-workflow` pipeline (phases, inputs, dev
+server, outputs) and the auxiliary `ah-*` skills. Whenever you change the
+pipeline — phase order, the skill run in a phase, inputs propagated between
+phases, the dev-server preflight, or produced artifacts — update
+`ARCHITECTURE.md` (and its mermaid diagram) in the same change so it never
+drifts from `skills/ah-workflow/SKILL.md` and
+`skills/ah-workflow/references/progress-workflow.md`.
+
 ## Writing & editing SKILL.md files (token optimization)
 
 Keep `skills/ah-*/SKILL.md` prose terse to cut token usage, applying
