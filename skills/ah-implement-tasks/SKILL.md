@@ -1,6 +1,6 @@
 ---
 name: ah-implement-tasks
-description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Validates prerequisites, detects the project's tech stack to load relevant best-practice context (React composition patterns, performance guidelines, component building), gathers live library documentation via context7, fetches dependency source via npx opensrc, then runs speckit.implement as a subagent with TDD, progress tracking, and commit-after-pass. Implementer subagents can search GitHub for real-world patterns via grep MCP, look up docs on-the-fly via context7, and visually verify UI work via chrome-devtools. Supports resume from interrupted runs, monorepo scoping, and automatic retry on incomplete passes. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
+description: Use this skill to implement tasks from tasks.md when using the "ah" prefix. Use when asked to "ah implement tasks". Validates prerequisites, detects the project's tech stack to load relevant best-practice context (React composition patterns, performance guidelines, component building), gathers live library documentation via context7, fetches dependency source via npx opensrc, then runs speckit.implement as a subagent with TDD, progress tracking, and commit-after-pass. Implementer subagents can search GitHub for real-world patterns via grep MCP, look up docs on-the-fly via context7, and visually verify UI work via agent-browser. Supports resume from interrupted runs, monorepo scoping, and automatic retry on incomplete passes. Also use when the user mentions implementing a feature plan, executing a task list, or starting the coding phase after task creation with the "ah" prefix.
 argument-hint: "optional: feature directory path, specific task IDs, skip phases, or additional instructions"
 ---
 
@@ -22,7 +22,7 @@ Tools below available to orchestrator and implementer subagents. Use when situat
 |------|-------------|-------------|
 | `context7` MCP | Fetches current, version-specific library documentation | During context loading (step 2) and inside implementer subagents on unfamiliar or recently-changed APIs |
 | `grep` MCP | Searches 1M+ public GitHub repos for code patterns | Inside implementer subagents needing real-world usage, implementation patterns, solutions to tricky problems |
-| `/chrome-devtools-cli` skill | Browser automation: screenshots, DOM inspection, Lighthouse audits | Inside implementer subagents for visual verification of UI implementations (frontend tasks only) |
+| `agent-browser` skill | Browser automation: navigate, snapshot a11y tree, screenshots, DOM inspection | Inside implementer subagents for visual verification of UI implementations (frontend tasks only) |
 | `npx opensrc` | Fetches npm package source code locally | During context loading (step 2) when tasks reference libraries where type definitions alone insufficient |
 | `npx repomix` | Packs codebase sections into AI-friendly format | During context loading (step 2) to give implementer compact context of relevant source files |
 

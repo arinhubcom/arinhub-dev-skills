@@ -14,7 +14,7 @@
  * min-width:auto, which prevents flex-shrink from working below content size.
  *
  * @customize Change '.flex-container' to match the flex/grid container.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat flex-grid-inspector.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Object} Container properties and array of children with their sizing.
  */
 () => {

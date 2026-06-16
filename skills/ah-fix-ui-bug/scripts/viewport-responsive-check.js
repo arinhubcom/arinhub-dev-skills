@@ -9,12 +9,12 @@
  *
  * This script snapshots the container's layout type (including containerType
  * for CSS container queries) and every child's display mode and width in one
- * call. Running it at different viewport sizes (via chrome-devtools resize_page)
+ * call. Running it at different viewport sizes (via agent-browser set viewport)
  * and comparing the outputs reveals exactly which breakpoint transition changes
  * the layout and which child is affected.
  *
  * @customize Change '.responsive-container' to match the container being tested.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat viewport-responsive-check.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Object} Container type/width and array of children with display/width.
  */
 () => {

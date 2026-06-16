@@ -10,7 +10,7 @@
  * - `noise`: added, attr-change -- may be normal DOM activity, investigate
  *   only if flashes array is empty
  *
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat collect-flash-results.js; printf ')()'; } | agent-browser eval --stdin
  * @requires flash-detector.js must be injected first.
  * @returns {Object} Separated flash vs noise detections with summary.
  */

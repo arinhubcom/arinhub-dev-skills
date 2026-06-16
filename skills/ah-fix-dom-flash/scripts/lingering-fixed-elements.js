@@ -14,7 +14,7 @@
  * and data attributes so you can distinguish legitimate elements (navbar, toast)
  * from leftover ghost elements.
  *
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat lingering-fixed-elements.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Array} Positioned elements with their properties and visibility.
  */
 () => {

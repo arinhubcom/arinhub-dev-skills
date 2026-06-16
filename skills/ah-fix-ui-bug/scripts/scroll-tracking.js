@@ -20,7 +20,7 @@
  * at MAX_ENTRIES so it cannot grow without bound during long sessions.
  *
  * @customize Change '.scroll-container' to match the scrollable element(s).
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat scroll-tracking.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Array} window.__scrollLog - Scroll position entries with timestamps (capped).
  * @global {Function} window.__stopScrollLog - Removes all scroll listeners.
  * @returns {string} Confirmation message.

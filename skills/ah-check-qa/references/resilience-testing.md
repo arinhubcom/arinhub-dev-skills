@@ -12,7 +12,7 @@ forms or many interactive elements, run on that route too.
 Before running destructive tests, record the current console error count:
 
 ```bash
-chrome-devtools list_console_messages --types error --pageSize 100
+agent-browser console
 ```
 
 Save the count for comparison after tests complete.
@@ -22,7 +22,7 @@ Save the count for comparison after tests complete.
 Read `scripts/resilience-test.js` and inject it:
 
 ```bash
-chrome-devtools evaluate_script "<resilience-test.js content>"
+{ printf '('; cat scripts/resilience-test.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 The script runs these tests automatically and returns a JSON report:
@@ -58,19 +58,19 @@ Test page stability under aggressive navigation:
 
 ```bash
 # Rapid reload cycle
-chrome-devtools navigate_page --url "reload"
-chrome-devtools navigate_page --url "reload"
-chrome-devtools wait_for --event networkIdle --timeout 5000
+agent-browser reload
+agent-browser reload
+sleep 3
 
 # Rapid back/forward (only if history exists from prior steps)
-chrome-devtools navigate_page --url "back"
-chrome-devtools navigate_page --url "forward"
-chrome-devtools navigate_page --url "back"
-chrome-devtools navigate_page --url "forward"
-chrome-devtools wait_for --event networkIdle --timeout 5000
+agent-browser back
+agent-browser forward
+agent-browser back
+agent-browser forward
+sleep 3
 
 # Check for errors after navigation stress
-chrome-devtools list_console_messages --types error --pageSize 50
+agent-browser console
 ```
 
 ## d. Viewport Stress
@@ -78,17 +78,17 @@ chrome-devtools list_console_messages --types error --pageSize 50
 Rapidly cycle through viewport sizes to trigger responsive layout edge cases:
 
 ```bash
-chrome-devtools resize_page 320 480
-chrome-devtools resize_page 1920 1080
-chrome-devtools resize_page 375 812
-chrome-devtools resize_page 2560 1440
-chrome-devtools resize_page 768 1024
+agent-browser set viewport 320 480
+agent-browser set viewport 1920 1080
+agent-browser set viewport 375 812
+agent-browser set viewport 2560 1440
+agent-browser set viewport 768 1024
 
 # Check for JS errors after rapid resizing
-chrome-devtools list_console_messages --types error --pageSize 50
+agent-browser console
 
 # Take snapshot to verify layout survived
-chrome-devtools take_snapshot --verbose true
+agent-browser snapshot -i
 ```
 
 Look for:
@@ -101,19 +101,23 @@ Look for:
 Test the page under slow network conditions:
 
 ```bash
-# Throttle to slow 3G
-chrome-devtools emulate --network "Slow 3G"
+# agent-browser has no built-in network throttling profile. To approximate slow
+# network conditions, intercept requests and add latency via `agent-browser network
+# route` (request mocking/interception), or use `agent-browser network har` to
+# record/replay. If neither is available in your build, skip the throttle and note
+# it in the report.
+agent-browser network route
 
-# Reload and wait (longer timeout for throttled network)
-chrome-devtools navigate_page --url "reload"
-chrome-devtools wait_for --event networkIdle --timeout 30000
+# Reload and wait (longer settle for throttled network)
+agent-browser reload
+sleep 30
 
 # Check for timeout errors or broken UI
-chrome-devtools list_console_messages --types error --pageSize 50
-chrome-devtools take_snapshot --verbose true
+agent-browser console
+agent-browser snapshot -i
 
-# Restore normal network
-chrome-devtools emulate --network "No throttling"
+# Restore normal network (clear any active routes)
+agent-browser network route
 ```
 
 Look for:
@@ -128,21 +132,21 @@ Test keyboard interaction resilience:
 
 ```bash
 # Tab through focusable elements rapidly
-chrome-devtools press_key "Tab"
-chrome-devtools press_key "Tab"
-chrome-devtools press_key "Tab"
-chrome-devtools press_key "Tab"
-chrome-devtools press_key "Tab"
+agent-browser press Tab
+agent-browser press Tab
+agent-browser press Tab
+agent-browser press Tab
+agent-browser press Tab
 
 # Escape key spam (close modals, cancel operations)
-chrome-devtools press_key "Escape"
-chrome-devtools press_key "Escape"
+agent-browser press Escape
+agent-browser press Escape
 
 # Enter key on whatever is focused
-chrome-devtools press_key "Enter"
+agent-browser press Enter
 
 # Check for errors
-chrome-devtools list_console_messages --types error --pageSize 50
+agent-browser console
 ```
 
 ## g. Compare Error Count
@@ -150,7 +154,7 @@ chrome-devtools list_console_messages --types error --pageSize 50
 Compare post-test console errors with the baseline from step a:
 
 ```bash
-chrome-devtools list_console_messages --types error --pageSize 100
+agent-browser console
 ```
 
 New errors introduced during resilience testing indicate fragile error handling.
@@ -162,7 +166,6 @@ Classify new errors:
 Restore page to a known good state before continuing:
 
 ```bash
-chrome-devtools navigate_page --url "${BASE_URL}"
-chrome-devtools wait_for --event networkIdle --timeout 10000
-chrome-devtools resize_page 1280 800
+agent-browser open "${BASE_URL}"
+agent-browser set viewport 1280 800
 ```

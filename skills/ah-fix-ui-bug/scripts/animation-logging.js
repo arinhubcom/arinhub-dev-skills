@@ -19,7 +19,7 @@
  * window.__restoreAnimate() puts the original HTMLElement.prototype.animate back,
  * so the patch does not leak for the rest of the page lifetime once debugging ends.
  *
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat animation-logging.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Function} window.__restoreAnimate - Restores the original animate().
  * @returns {string} Confirmation message.
  */

@@ -14,7 +14,7 @@
  * the ground truth the browser is using for layout.
  *
  * @customize Change '.target-element' to match the element being debugged.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat computed-styles-dump.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Object} Key computed CSS properties and bounding rect of the element.
  */
 () => {

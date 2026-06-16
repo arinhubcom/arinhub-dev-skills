@@ -14,7 +14,7 @@
  * from what the developer expects by reading z-index values alone.
  *
  * @customize Change '.target-element' to match the element with wrong layering.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat stacking-context-inspector.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Array} Ancestor stacking contexts with their z-index and trigger property.
  */
 () => {

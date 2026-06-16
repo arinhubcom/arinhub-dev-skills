@@ -14,7 +14,7 @@
  *
  * @param {number} targetX - X coordinate (viewport pixels).
  * @param {number} targetY - Y coordinate (viewport pixels).
- * @usage chrome-devtools evaluate_script "<content>" --args 200 150
+ * @usage inline coordinates (e.g. 200 150) into the script, then: { printf '('; cat visual-position-marker.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {string} Confirmation with coordinates.
  */
 (targetX, targetY) => {

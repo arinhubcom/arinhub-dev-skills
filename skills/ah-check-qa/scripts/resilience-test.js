@@ -1,5 +1,5 @@
 // Resilience Test Script
-// Inject via: chrome-devtools evaluate_script "<this script>"
+// Inject via: { printf '('; cat resilience-test.js; printf ')()'; } | agent-browser eval --stdin
 // Attempts to break the page through stress testing, input fuzzing,
 // and edge case scenarios. Captures JS errors and reports findings.
 // Returns JSON with test results and discovered issues.

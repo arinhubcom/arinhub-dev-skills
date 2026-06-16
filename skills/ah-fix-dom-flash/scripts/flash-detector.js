@@ -27,7 +27,7 @@
  *     selector: '[data-my-overlay]',  // CSS selector for suspected element
  *     maxDetections: 50,              // max entries to record (default: 50)
  *   }
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat flash-detector.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Array} window.__flashDetected - Collected flash detection entries.
  * @global {Function} window.__stopFlashDetector - Call to stop both observers.
  * @returns {string} Confirmation message with active configuration.

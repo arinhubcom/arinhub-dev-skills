@@ -9,7 +9,7 @@ Use this template when generating the final QA report.
 **URL:** {base-url}
 **Routes tested:** {count} ({comma-separated list})
 **Viewports:** Mobile (375x812), Tablet (768x1024), Desktop (1280x800)
-**Tools used:** chrome-devtools-cli
+**Tools used:** agent-browser
 
 ## Summary
 
@@ -20,14 +20,18 @@ Use this template when generating the final QA report.
 | Resilience | {n} | {n} | {n} |
 | E2E Smoke Tests | {pass}/{total} passed | | |
 
-### Lighthouse Scores
+### Core Web Vitals
 
-| Metric | Score |
-|---|---|
-| Performance | {score}/100 |
-| Accessibility | {score}/100 |
-| Best Practices | {score}/100 |
-| SEO | {score}/100 |
+| Metric | Value | Threshold |
+|---|---|---|
+| LCP | {value} | < 2.5s |
+| CLS | {value} | < 0.1 |
+| INP | {value} | < 200ms |
+| FCP | {value} | < 1.8s |
+| TTFB | {value} | < 0.8s |
+
+Note: Lighthouse-specific category scores (Accessibility, Best Practices, SEO)
+are not available via agent-browser.
 
 ## UI Issues
 

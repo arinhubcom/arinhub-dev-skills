@@ -3,7 +3,7 @@
  *
  * Some UI bugs can only be reproduced with real user interaction -- libraries
  * like dnd-kit check event.isPrimary on PointerEvents, which synthetic CDP
- * events may not set. In these cases, automated chrome-devtools click commands
+ * events may not set. In these cases, automated agent-browser click commands
  * won't trigger the bug. This script bridges that gap: it installs a visible
  * on-screen overlay that shows position changes and attribute mutations in
  * real-time, so the developer can interact manually in the browser while the
@@ -19,7 +19,7 @@
  * and removes the overlay element so nothing leaks once debugging is done.
  *
  * @customize Change '.target-element' to match the element(s) being debugged.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat persistent-overlay.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Function} window.__stopOverlay - Tears down the overlay and observers.
  * @returns {string} Confirmation message.
  */

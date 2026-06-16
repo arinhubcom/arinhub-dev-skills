@@ -19,7 +19,7 @@
  * the page lifetime once debugging is done.
  *
  * @customize Change '.target-element' to match the element(s) being tracked.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat position-tracking.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Array} window.__posLog - Position change entries with timestamps (capped).
  * @global {Function} window.__stopPosLog - Cancels the rAF loop.
  * @returns {string} Confirmation with element count.

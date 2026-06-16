@@ -1,13 +1,13 @@
 ---
 name: ah-fix-dom-flash
-description: "Use this skill to detect and debug DOM flash/flicker bugs using chrome-devtools CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements, opacity/transform jump flashes on mount/unmount, portal content outliving its positioning context, or any single-frame visual glitch after a state change."
+description: "Use this skill to detect and debug DOM flash/flicker bugs using agent-browser CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements, opacity/transform jump flashes on mount/unmount, portal content outliving its positioning context, or any single-frame visual glitch after a state change."
 argument-hint: "URL or page description, suspected element selector or interaction type"
 ---
 
 # Fix DOM Flash/Flicker Bugs
 
-This skill uses the `chrome-devtools-cli` skill for all browser interactions.
-Invoke `/chrome-devtools-cli` for help with command syntax or flags.
+This skill uses the `agent-browser` skill for all browser interactions.
+Load the `agent-browser` skill (`agent-browser skills get core`) for help with command syntax or flags.
 
 Diagnostic scripts are in `scripts/`. The flash detector is configurable via
 `window.__flashDetectorConfig` -- set it before injecting; no manual script
@@ -32,29 +32,30 @@ editing needed.
 
 ## Procedure
 
-### 1. Verify Chrome DevTools Connection
+### 1. Verify Browser Connection
 
 ```bash
-chrome-devtools list_pages
+agent-browser tab
 ```
 
-If no pages are available:
+If the browser does not connect (it auto-starts on first use):
 
 ```bash
-chrome-devtools start
+agent-browser doctor
 ```
 
 ### 2. Navigate and Take Baseline
 
 ```bash
-chrome-devtools navigate_page --url "http://localhost:6006/iframe.html?id=..."
-chrome-devtools take_snapshot --verbose true
-chrome-devtools take_screenshot --filePath /tmp/before.png
+agent-browser open "http://localhost:6006/iframe.html?id=..."
+agent-browser snapshot -i
+agent-browser screenshot /tmp/before.png
 ```
 
-The a11y snapshot returns elements like `uid=6_2 button "Apple"`. These UIDs
-are used in subsequent click/hover/drag commands. Prefer `take_snapshot`
-over `take_screenshot` for debugging -- snapshots provide structured data.
+The a11y snapshot returns elements with refs like `@e1 button "Apple"`. These
+refs are used in subsequent click/hover/drag commands and go stale after a page
+change -- re-snapshot when that happens. Prefer `snapshot -i`
+over `screenshot` for debugging -- snapshots provide structured data.
 
 ### 3. Configure and Install Flash Detector
 
@@ -63,7 +64,7 @@ first. This avoids manual code editing -- the script reads the config at
 injection time:
 
 ```bash
-chrome-devtools evaluate_script "() => { window.__flashDetectorConfig = { selector: '[data-dnd-overlay]' }; return 'configured'; }"
+agent-browser eval "window.__flashDetectorConfig = { selector: '[data-dnd-overlay]' }; 'configured'"
 ```
 
 Configuration options (all optional):
@@ -73,7 +74,7 @@ Configuration options (all optional):
 Then read `scripts/flash-detector.js` and inject it as-is:
 
 ```bash
-chrome-devtools evaluate_script "<flash-detector.js content>"
+{ printf '('; cat scripts/flash-detector.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 Available scripts:
@@ -90,16 +91,17 @@ Trigger the bug using the appropriate command:
 
 ```bash
 # Drag-and-drop
-chrome-devtools drag "<src_uid>" "<dst_uid>" --includeSnapshot true
+agent-browser drag @e1 @e2
 
 # Click
-chrome-devtools click "<uid>" --includeSnapshot true
+agent-browser click @e3
+agent-browser snapshot -i
 
 # Hover
-chrome-devtools hover "<uid>" --includeSnapshot true
+agent-browser hover @e3
 
 # Keyboard
-chrome-devtools press_key "<key>"
+agent-browser press <key>
 ```
 
 Flash bugs are timing-dependent. If the first attempt shows zero detections,
@@ -115,7 +117,7 @@ detector (and optionally the config) before reproducing again.
 Read `scripts/collect-flash-results.js` and inject it:
 
 ```bash
-chrome-devtools evaluate_script "<collect-flash-results.js content>"
+{ printf '('; cat scripts/collect-flash-results.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 The collector separates results into high-confidence flashes and lower-confidence noise:
@@ -156,9 +158,9 @@ flash.
 If zero flashes after 3 attempts, use a Performance trace:
 
 ```bash
-chrome-devtools performance_start_trace --filePath /tmp/trace.json
+agent-browser trace start
 # Reproduce the interaction
-chrome-devtools performance_stop_trace --filePath /tmp/trace.json
+agent-browser trace stop /tmp/trace.json
 ```
 
 ### 7. Inspect Lingering Elements
@@ -166,7 +168,7 @@ chrome-devtools performance_stop_trace --filePath /tmp/trace.json
 After the interaction, check for leftover positioned elements:
 
 ```bash
-chrome-devtools evaluate_script "<lingering-fixed-elements.js content>"
+{ printf '('; cat scripts/lingering-fixed-elements.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 This reports both `position: fixed` elements and `position: absolute`
@@ -197,23 +199,23 @@ Quick reference:
 After applying a fix, reload and re-run the full detection cycle:
 
 ```bash
-chrome-devtools navigate_page --url "..."
-chrome-devtools take_snapshot --verbose true
+agent-browser open "..."
+agent-browser snapshot -i
 
 # Optionally re-configure
-chrome-devtools evaluate_script "() => { window.__flashDetectorConfig = { selector: '...' }; return 'ok'; }"
+agent-browser eval "window.__flashDetectorConfig = { selector: '...' }; 'ok'"
 
 # Inject detector
-chrome-devtools evaluate_script "<flash-detector.js content>"
+{ printf '('; cat scripts/flash-detector.js; printf ')()'; } | agent-browser eval --stdin
 
 # Reproduce interaction 2-3 times
 # ...
 
 # Collect -- expect zero flashes
-chrome-devtools evaluate_script "<collect-flash-results.js content>"
+{ printf '('; cat scripts/collect-flash-results.js; printf ')()'; } | agent-browser eval --stdin
 
 # Visual confirmation
-chrome-devtools take_screenshot --filePath /tmp/after-fix.png
+agent-browser screenshot /tmp/after-fix.png
 ```
 
 ### 10. Report to User
@@ -226,12 +228,12 @@ chrome-devtools take_screenshot --filePath /tmp/after-fix.png
 
 ## Error Handling
 
-- Chrome DevTools connection fails: run `chrome-devtools start`
+- Browser connection fails: run `agent-browser doctor`
 - Flash detector fails to inject (CSP): suggest disabling CSP in dev environment
 - Zero detections after 3+ attempts: use Performance traces or manual frame-stepping
-- Element UID not found: re-take snapshot with `chrome-devtools take_snapshot`
+- Element ref not found (stale after page change): re-take snapshot with `agent-browser snapshot -i`
 - Script returns undefined: ensure the script is wrapped as an arrow function `() => { ... }`
 
 ## Quick Reference
 
-For the full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.
+For the full agent-browser command list and flags, load the `agent-browser` skill (`agent-browser skills get core`).

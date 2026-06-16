@@ -1,5 +1,5 @@
 // Interactive Elements Audit Script
-// Inject via: chrome-devtools evaluate_script "<this script>"
+// Inject via: { printf '('; cat interactive-audit.js; printf ')()'; } | agent-browser eval --stdin
 // Scans all interactive elements and checks accessibility, visibility,
 // touch target size, and keyboard reachability.
 // Returns JSON array of issues.

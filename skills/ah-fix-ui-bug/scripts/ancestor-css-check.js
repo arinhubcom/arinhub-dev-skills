@@ -14,7 +14,7 @@
  * grandparent, not the direct parent. Checking only the parent would miss it.
  *
  * @customize Change '.target-element' to match the mispositioned element.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat ancestor-css-check.js; printf ')()'; } | agent-browser eval --stdin
  * @returns {Array} Ancestor elements with containing-block-creating properties.
  */
 () => {

@@ -17,7 +17,7 @@
  * The observer is capped at MAX_SHIFTS entries and exposes window.__stopShifts()
  * so monitoring can be torn down cleanly instead of leaking for the page lifetime.
  *
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat layout-shift-detection.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Array} window.__shifts - Collected layout shift entries (capped).
  * @global {Function} window.__stopShifts - Disconnects the observer.
  * @returns {string} Confirmation message.

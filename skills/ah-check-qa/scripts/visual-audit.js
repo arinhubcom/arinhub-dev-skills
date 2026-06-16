@@ -1,5 +1,5 @@
 // Visual Audit Script
-// Inject via: chrome-devtools evaluate_script "<this script>"
+// Inject via: { printf '('; cat visual-audit.js; printf ')()'; } | agent-browser eval --stdin
 // Returns JSON { summary, issues } -- issues is capped (see MAX_ISSUES) and the
 // summary keeps the true totals so nothing is lost when the list is truncated.
 () => {

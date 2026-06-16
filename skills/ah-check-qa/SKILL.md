@@ -1,19 +1,20 @@
 ---
 name: ah-check-qa
-description: "Use this skill to run UI and UX quality assurance checks when using the 'ah' prefix. Use when asked to 'ah check qa'. Also use when the user wants to verify visual correctness, check responsive layout, audit interactive elements, run E2E smoke tests, detect console or network errors, compare before/after screenshots during refactoring, or verify that a page works correctly across viewports. Uses chrome-devtools CLI for visual inspection, snapshots, Lighthouse audits, interaction testing, and E2E flows. Works with any localhost dev server, Storybook, or live URL."
+description: "Use this skill to run UI and UX quality assurance checks when using the 'ah' prefix. Use when asked to 'ah check qa'. Also use when the user wants to verify visual correctness, check responsive layout, audit interactive elements, run E2E smoke tests, detect console or network errors, compare before/after screenshots during refactoring, or verify that a page works correctly across viewports. Uses agent-browser CLI for visual inspection, snapshots, Core Web Vitals audits, interaction testing, and E2E flows. Works with any localhost dev server, Storybook, or live URL."
 argument-hint: "URL (optional, auto-detected from running dev server), route or page name to focus on, or 'before' to capture baseline screenshots"
 ---
 
 # Check Quality Assurance
 
-Run UI/UX quality checks via `chrome-devtools-cli`: visual inspection, screenshots,
-Lighthouse audits, interaction testing, E2E flow verification. Auto-discovers routes,
+Run UI/UX quality checks via `agent-browser`: visual inspection, screenshots,
+Core Web Vitals audits, interaction testing, E2E flow verification. Auto-discovers routes,
 detects dev server, generates QA report with screenshots as evidence.
 
-Invoke `/chrome-devtools-cli` for command syntax/flags help.
+Load the `agent-browser` skill and run `agent-browser skills get core` for command syntax/flags help.
 
-Diagnostic scripts in `scripts/`. Inject via `chrome-devtools evaluate_script` after
-reading their content -- no manual editing, they scan full page.
+Diagnostic scripts in `scripts/`. Inject by piping their content into
+`agent-browser eval --stdin` (wrapped as an IIFE) after reading their content --
+no manual editing, they scan full page.
 
 ## Input
 
@@ -107,15 +108,15 @@ order rather than testing everything:
 Cap at 8-10 routes unless user explicitly asks for full coverage. Mention skipped
 routes in report so nothing is silently ignored.
 
-### 2. Verify Chrome DevTools Connection
+### 2. Verify Browser Connection
 
 ```bash
-chrome-devtools list_pages
+agent-browser tab
 ```
 
-If no pages available:
+The browser auto-starts on the first command. If you hit connection problems:
 ```bash
-chrome-devtools start
+agent-browser doctor
 ```
 
 ### 3. Wait for Content and Dismiss Overlays
@@ -125,8 +126,9 @@ loading before screenshots or audits. SPAs and SSR-hydrated apps often show spin
 or skeleton screens that disappear once data arrives.
 
 ```bash
-# Wait for network idle (no pending requests for 500ms)
-chrome-devtools wait_for --event networkIdle --timeout 10000
+# agent-browser open waits for load on navigation; for a standalone settle after
+# the page is already open, pause briefly to let pending requests finish.
+sleep 2
 ```
 
 After page settles, check for and dismiss blocking overlays (cookie banners,
@@ -134,13 +136,14 @@ newsletter popups, onboarding modals). These interfere with screenshots and
 interaction tests:
 
 ```bash
-# Verbose snapshot here -- fixed-position/backdrop detail helps spot overlays.
-# Elsewhere prefer plain `take_snapshot` (default); add `--verbose true` only when
-# you specifically need the full a11y tree, since verbose output is large.
-chrome-devtools take_snapshot --verbose true
+# Interactive snapshot here (`-i` exposes @e refs) -- fixed-position/backdrop detail
+# helps spot overlays. Elsewhere prefer plain `snapshot` when you only need structure;
+# add `-i` when you need actionable element refs, since that output is larger.
+agent-browser snapshot -i
 # Look for common patterns: cookie consent, modal backdrops, dialog elements
-# If found, dismiss by clicking accept/close/dismiss buttons
-chrome-devtools click "<dismiss_button_uid>" --includeSnapshot true
+# If found, dismiss by clicking accept/close/dismiss buttons, then re-snapshot
+agent-browser click @e3
+agent-browser snapshot -i
 ```
 
 Common overlay indicators in a11y snapshot:
@@ -164,9 +167,8 @@ For each discovered route (respecting priority order from Step 1):
 #### 5a. Navigate and Snapshot
 
 ```bash
-chrome-devtools navigate_page --url "${ROUTE_URL}"
-chrome-devtools wait_for --event networkIdle --timeout 10000
-chrome-devtools take_snapshot
+agent-browser open "${ROUTE_URL}"
+agent-browser snapshot
 ```
 
 Review a11y snapshot for structural issues:
@@ -181,17 +183,17 @@ Capture at three breakpoints, check layout issues at each:
 
 ```bash
 # Mobile
-chrome-devtools resize_page 375 812
-chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-mobile-${ROUTE_SLUG}.png"
-chrome-devtools take_snapshot
+agent-browser set viewport 375 812
+agent-browser screenshot "${SCREENSHOTS_DIR}/current-mobile-${ROUTE_SLUG}.png"
+agent-browser snapshot
 
 # Tablet
-chrome-devtools resize_page 768 1024
-chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-tablet-${ROUTE_SLUG}.png"
+agent-browser set viewport 768 1024
+agent-browser screenshot "${SCREENSHOTS_DIR}/current-tablet-${ROUTE_SLUG}.png"
 
 # Desktop
-chrome-devtools resize_page 1280 800
-chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-desktop-${ROUTE_SLUG}.png"
+agent-browser set viewport 1280 800
+agent-browser screenshot "${SCREENSHOTS_DIR}/current-desktop-${ROUTE_SLUG}.png"
 ```
 
 At each viewport, review snapshot for responsive issues:
@@ -200,23 +202,28 @@ At each viewport, review snapshot for responsive issues:
 - Touch targets too small on mobile (< 44x44px)
 - Content hidden unintentionally
 
-#### 5c. Lighthouse Audit
+#### 5c. Core Web Vitals Audit
+
+agent-browser has no Lighthouse. Capture Core Web Vitals instead:
 
 ```bash
-chrome-devtools lighthouse_audit
+agent-browser vitals "${ROUTE_URL}"
 ```
 
-Extract scores for: Performance, Accessibility, Best Practices, SEO.
-Record any failing audits (score < 90) with descriptions.
+Extract metrics: LCP, CLS, TTFB, FCP, INP. Record any that exceed
+"good" thresholds (e.g. LCP > 2.5s, CLS > 0.1, INP > 200ms) with descriptions.
+Note: Lighthouse-specific category scores (Accessibility, Best Practices, SEO)
+are not available via agent-browser -- rely on the snapshot and audit scripts for
+accessibility/structure findings.
 
 #### 5d. Start Performance Trace
 
-Start trace after screenshots and Lighthouse done -- those involve viewport resizes
-and Lighthouse's own page manipulation that would pollute the trace. From here, trace
+Start trace after screenshots and the vitals audit are done -- those involve viewport
+resizes and page manipulation that would pollute the trace. From here, trace
 captures script injections, clicks, hovers, form fills through Steps 5e-5f and 6.
 
 ```bash
-chrome-devtools performance_start_trace --filePath /tmp/qa-trace-${ROUTE_SLUG}.json
+agent-browser trace start
 ```
 
 #### 5e. Visual Audit Script
@@ -224,7 +231,7 @@ chrome-devtools performance_start_trace --filePath /tmp/qa-trace-${ROUTE_SLUG}.j
 Read `scripts/visual-audit.js` and inject it:
 
 ```bash
-chrome-devtools evaluate_script "<visual-audit.js content>"
+{ printf '('; cat scripts/visual-audit.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 Script returns JSON `{ summary, issues }` (broken images, text overflow, elements
@@ -235,10 +242,10 @@ Use `summary` for tallies, `issues` for specifics -- record all findings.
 #### 5f. Console and Network Errors
 
 ```bash
-chrome-devtools list_console_messages --types error,warning --pageSize 50
-# Only the failed/slow requests matter below -- cap the page so a chatty route
-# does not flood context. Filter to error statuses where supported.
-chrome-devtools list_network_requests --pageSize 30
+agent-browser console
+# Only the failed/slow requests matter below -- a chatty route can flood context,
+# so focus on error statuses where supported.
+agent-browser network requests
 ```
 
 From network requests, identify:
@@ -255,17 +262,21 @@ backgrounds, images without transparent backgrounds clashing with dark surfaces,
 hardcoded colors that ignore theme variables.
 
 ```bash
-# Switch to dark color scheme
-chrome-devtools emulate --colorScheme dark
+# Switch to dark color scheme.
+# Note: if agent-browser exposes no color-scheme emulation, force it from the page
+# by setting the preference (e.g. toggle the app's theme switch via a click, or
+# `agent-browser eval "document.documentElement.classList.add('dark')"` /
+# set `data-theme="dark"`) to match how the app activates dark mode.
+agent-browser eval "document.documentElement.classList.add('dark')"
 
-# Wait for theme transition to settle
-chrome-devtools wait_for --event networkIdle --timeout 3000
+# Pause to let the theme transition settle
+sleep 1
 
 # Screenshot at desktop viewport (one viewport is enough for theme checks)
-chrome-devtools take_screenshot --filePath "${SCREENSHOTS_DIR}/current-dark-${ROUTE_SLUG}.png"
+agent-browser screenshot "${SCREENSHOTS_DIR}/current-dark-${ROUTE_SLUG}.png"
 
 # Run the visual audit again in dark mode -- different issues surface
-chrome-devtools evaluate_script "<visual-audit.js content>"
+{ printf '('; cat scripts/visual-audit.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 Tag any dark-mode-specific findings with `[dark]` in report. Common dark mode issues:
@@ -276,7 +287,7 @@ Tag any dark-mode-specific findings with `[dark]` in report. Common dark mode is
 
 ```bash
 # Restore light mode before moving to the next route
-chrome-devtools emulate --colorScheme light
+agent-browser eval "document.documentElement.classList.remove('dark')"
 ```
 
 Skip dark mode testing if app has no dark mode support -- false positives from
@@ -289,7 +300,7 @@ forcing dark scheme on a light-only app are not useful.
 Read `scripts/interactive-audit.js` and inject it:
 
 ```bash
-chrome-devtools evaluate_script "<interactive-audit.js content>"
+{ printf '('; cat scripts/interactive-audit.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 Script scans all interactive elements (buttons, links, inputs, selects) and checks:
@@ -298,16 +309,20 @@ tabindex reachability. Returns categorized issue list.
 
 #### 6b. Interaction Spot-Checks
 
-Pick 3-5 key interactive elements from a11y snapshot (primary buttons, navigation
-links, form inputs) and verify they respond to interaction:
+Pick 3-5 key interactive elements from the interactive snapshot (primary buttons,
+navigation links, form inputs) and verify they respond to interaction. Get element
+refs (`@e1`, `@e2`, ...) from `agent-browser snapshot -i`; they go stale after the
+page changes, so re-snapshot when that happens:
 
 ```bash
-# Click a primary button
-chrome-devtools click "<uid>" --includeSnapshot true
+# Click a primary button, then re-snapshot to check the result
+agent-browser click @e3
+agent-browser snapshot -i
 # Verify state changed (new content, navigation, modal opened)
 
 # Hover a navigation item
-chrome-devtools hover "<uid>" --includeSnapshot true
+agent-browser hover @e3
+agent-browser snapshot -i
 # Verify hover state appears (dropdown, tooltip, style change)
 ```
 
@@ -317,11 +332,12 @@ If page contains form elements, test basic form behavior:
 
 ```bash
 # Fill an input
-chrome-devtools click "<input_uid>" --includeSnapshot true
-chrome-devtools type_text "test@example.com"
+agent-browser fill @e3 "test@example.com"
+agent-browser snapshot -i
 
 # Submit with empty required fields (validation check)
-chrome-devtools click "<submit_uid>" --includeSnapshot true
+agent-browser click @e5
+agent-browser snapshot -i
 # Verify validation messages appear
 ```
 
@@ -329,11 +345,11 @@ chrome-devtools click "<submit_uid>" --includeSnapshot true
 
 Trace running since Step 5d, capturing visual audit script injection, console/network
 checks, clicks, hovers, form fills -- the real interaction exercise without
-screenshot/Lighthouse noise. Stop and analyze now:
+screenshot/vitals-audit noise. Stop and analyze now:
 
 ```bash
-chrome-devtools performance_stop_trace --filePath /tmp/qa-trace-${ROUTE_SLUG}.json
-chrome-devtools performance_analyze_insight --filePath /tmp/qa-trace-${ROUTE_SLUG}.json
+agent-browser trace stop /tmp/qa-trace-${ROUTE_SLUG}.json
+# Analyze the saved trace for the insights listed below
 ```
 
 Look for:
@@ -356,17 +372,18 @@ Multi-step flow testing to verify pages work end-to-end.
 
 ```bash
 # Start from homepage
-chrome-devtools navigate_page --url "${BASE_URL}"
-chrome-devtools take_snapshot
+agent-browser open "${BASE_URL}"
+agent-browser snapshot -i
 
-# Identify navigation links from the a11y snapshot
-# Click through main navigation items using their UIDs
-chrome-devtools click "<nav_link_uid>" --includeSnapshot true
+# Identify navigation links from the snapshot
+# Click through main navigation items using their @e refs, then re-snapshot
+agent-browser click @e1
+agent-browser snapshot -i
 # Verify page changed (snapshot shows different content)
 
 # Test back navigation
-chrome-devtools navigate_page --url "back"
-chrome-devtools take_snapshot
+agent-browser back
+agent-browser snapshot -i
 # Verify returned to previous page
 ```
 
@@ -376,18 +393,20 @@ Identify primary user flow from route structure (e.g., homepage -> listing -> de
 or dashboard -> settings). Navigate through it:
 
 ```bash
-chrome-devtools navigate_page --url "${BASE_URL}"
-chrome-devtools take_snapshot
+agent-browser open "${BASE_URL}"
+agent-browser snapshot -i
 
 # Navigate to first discovered sub-route via link click
-chrome-devtools click "<link_uid>" --includeSnapshot true
+agent-browser click @e1
+agent-browser snapshot -i
 
 # Continue deeper if more routes exist
-chrome-devtools click "<next_link_uid>" --includeSnapshot true
+agent-browser click @e2
+agent-browser snapshot -i
 ```
 
 At each step, verify:
-- Page loads without errors: `chrome-devtools list_console_messages --types error`
+- Page loads without errors: `agent-browser console`
 - Content visible (snapshot shows meaningful content, not blank or stuck spinner)
 - Navigation working (URL or content changed)
 
@@ -397,11 +416,12 @@ Test that page state survives reload:
 
 ```bash
 # If on a page with filters/selections, interact with one
-chrome-devtools click "<filter_uid>" --includeSnapshot true
+agent-browser click @e1
+agent-browser snapshot -i
 
 # Reload the page
-chrome-devtools navigate_page --url "reload"
-chrome-devtools take_snapshot
+agent-browser reload
+agent-browser snapshot -i
 # Compare: did the state persist (URL params, visible selections)?
 ```
 
@@ -444,7 +464,7 @@ REPORT_FILE=${QA_DIR}/qa-report-${REPO_NAME}-$(date +%Y%m%d-%H%M%S).md
 Write report following template, then present report path and summary to user:
 
 - Total issues by severity (critical, warning, info)
-- Lighthouse scores
+- Core Web Vitals (LCP, CLS, INP, FCP, TTFB)
 - E2E pass/fail count
 - Visual regressions (if comparison mode)
 - Screenshot paths for evidence
@@ -453,16 +473,16 @@ Write report following template, then present report path and summary to user:
 
 - **No dev server running**: Stop and ask user to start one. Suggest
   framework-appropriate command (`npm run dev`, `npx storybook`, etc.).
-- **Chrome DevTools connection fails**: Run `chrome-devtools start` and retry.
+- **Browser connection fails**: Run `agent-browser doctor` and retry.
 - **Route discovery finds nothing**: Test root URL only.
-- **Lighthouse times out**: Report timeout, continue with other checks.
+- **Vitals audit times out**: Report timeout, continue with other checks.
 - **Page requires authentication**: If login page detected (form with password
   field), note it in report and test only public routes.
 
 ## Important Notes
 
-- Prefer `take_snapshot` over `take_screenshot` for analysis. Snapshots provide
-  structured a11y data; screenshots are evidence for the report.
+- Prefer `agent-browser snapshot` over `agent-browser screenshot` for analysis.
+  Snapshots provide structured a11y data; screenshots are evidence for the report.
 - The visual-audit and interactive-audit scripts return JSON -- parse the results,
   don't dump raw output into the report.
 - When testing responsive layouts, always resize BEFORE taking screenshots.
@@ -474,9 +494,10 @@ Write report following template, then present report path and summary to user:
 - The baseline screenshot mechanism uses a simple file pointer
   (`latest-baseline.txt`). Each `before` run creates a new timestamped directory,
   so old baselines are preserved.
-- Use `chrome-devtools navigate_page --url "back"` and `--url "forward"` for
-  history navigation, `--url "reload"` for page reload.
+- Use `agent-browser back` and `agent-browser forward` for history navigation,
+  `agent-browser reload` for page reload.
 
 ## Quick Reference
 
-For full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.
+For the full agent-browser command list and flags, load the `agent-browser` skill
+and run `agent-browser skills get core`.

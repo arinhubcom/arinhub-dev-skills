@@ -11,13 +11,13 @@ mkdir -p "${BASELINE_DIR}"
 
 For each route, at each viewport:
 ```bash
-chrome-devtools navigate_page --url "${URL}"
-chrome-devtools resize_page 375 812
-chrome-devtools take_screenshot --filePath "${BASELINE_DIR}/mobile-${ROUTE_SLUG}.png"
-chrome-devtools resize_page 768 1024
-chrome-devtools take_screenshot --filePath "${BASELINE_DIR}/tablet-${ROUTE_SLUG}.png"
-chrome-devtools resize_page 1280 800
-chrome-devtools take_screenshot --filePath "${BASELINE_DIR}/desktop-${ROUTE_SLUG}.png"
+agent-browser open "${URL}"
+agent-browser set viewport 375 812
+agent-browser screenshot "${BASELINE_DIR}/mobile-${ROUTE_SLUG}.png"
+agent-browser set viewport 768 1024
+agent-browser screenshot "${BASELINE_DIR}/tablet-${ROUTE_SLUG}.png"
+agent-browser set viewport 1280 800
+agent-browser screenshot "${BASELINE_DIR}/desktop-${ROUTE_SLUG}.png"
 ```
 
 Save the baseline directory path:

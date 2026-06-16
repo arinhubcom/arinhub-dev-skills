@@ -16,7 +16,7 @@
  * MAX_ENTRIES so it does not grow without bound during long sessions.
  *
  * @customize Change '.target-element' to match the element being debugged.
- * @usage chrome-devtools evaluate_script "<content>"
+ * @usage { printf '('; cat attribute-mutation-observer.js; printf ')()'; } | agent-browser eval --stdin
  * @global {Array} window.__mutations - Recorded attribute changes with computed state (capped).
  * @global {Function} window.__stopMutations - Disconnects the observer.
  * @returns {string} Confirmation message.

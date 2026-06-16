@@ -1,16 +1,17 @@
 ---
 name: ah-fix-ui-bug
-description: "Use this skill to debug and fix UI bugs in web apps when using the 'ah' prefix. Use when asked to 'ah fix ui bug'. Also use when elements are at wrong positions, animations land at wrong spots, layout shifts occur, elements overflow containers, buttons/chips/overlays are mispositioned, z-index layering is wrong, flex/grid alignment is off, text is truncated or overflowing, hover states get stuck, scroll jumps occur, or persistent visual regressions appear. Uses chrome-devtools CLI to navigate pages, inspect elements, inject diagnostic scripts, take screenshots, and analyze DOM mutations. Works with Storybook, localhost dev servers, or any browser page. For single-frame flash/flicker timing races, prefer ah-fix-dom-flash instead."
+description: "Use this skill to debug and fix UI bugs in web apps when using the 'ah' prefix. Use when asked to 'ah fix ui bug'. Also use when elements are at wrong positions, animations land at wrong spots, layout shifts occur, elements overflow containers, buttons/chips/overlays are mispositioned, z-index layering is wrong, flex/grid alignment is off, text is truncated or overflowing, hover states get stuck, scroll jumps occur, or persistent visual regressions appear. Uses agent-browser CLI to navigate pages, inspect elements, inject diagnostic scripts, take screenshots, and analyze DOM mutations. Works with Storybook, localhost dev servers, or any browser page. For single-frame flash/flicker timing races, prefer ah-fix-dom-flash instead."
 argument-hint: "URL or page description, element selector or interaction that triggers the bug"
 ---
 
-# Fix UI Bug with Chrome DevTools CLI
+# Fix UI Bug with agent-browser CLI
 
-Uses `chrome-devtools-cli` skill for all browser interactions.
-Invoke `/chrome-devtools-cli` for command syntax or flags.
+Uses the `agent-browser` skill for all browser interactions.
+Load the `agent-browser` skill and run `agent-browser skills get core` for
+command syntax or flags.
 
 Diagnostic scripts in `scripts/`. To use: read script file, customize
-selector for the bug, pass content to `chrome-devtools evaluate_script`.
+selector for the bug, pipe content via stdin to `agent-browser eval --stdin`.
 
 ## Input
 
@@ -20,38 +21,39 @@ selector for the bug, pass content to `chrome-devtools evaluate_script`.
 
 ## Procedure
 
-### 0. Verify Chrome DevTools Connection
+### 0. Verify Browser Connection
 
-Ensure Chrome running with DevTools protocol enabled.
+The browser auto-starts on the first command. List open tabs to confirm.
 
 ```bash
-chrome-devtools list_pages
+agent-browser tab
 ```
 
-No pages available? Start daemon:
+Connection problems? Run the doctor:
 
 ```bash
-chrome-devtools start
+agent-browser doctor
 ```
 
 ### 1. Navigate and Snapshot
 
-Orient -- see page contents, identify element UIDs.
+Orient -- see page contents, identify element refs.
 
 ```bash
 # Navigate to the page with the bug
-chrome-devtools navigate_page --url "http://localhost:6006/iframe.html?id=..."
+agent-browser open "http://localhost:6006/iframe.html?id=..."
 
-# Primary inspection tool -- returns structured a11y tree with element UIDs
-chrome-devtools take_snapshot --verbose true
+# Primary inspection tool -- returns structured a11y tree with element refs
+agent-browser snapshot -i
 
 # Visual screenshot only when you need a visual reference
-chrome-devtools take_screenshot --filePath /tmp/before.png
+agent-browser screenshot /tmp/before.png
 ```
 
-a11y snapshot returns elements like `uid=6_2 button "Apple"`. UIDs used in
-subsequent click/hover commands. Always prefer `take_snapshot` over
-`take_screenshot` for debugging -- structured, queryable data.
+a11y snapshot returns elements with refs like `@e1`, `@e2`, ... used in
+subsequent click/hover commands. Refs go stale after any page change --
+re-snapshot. Always prefer `snapshot -i` over `screenshot` for debugging --
+structured, queryable data.
 
 For Storybook, use iframe URL (`/iframe.html?id=...`) to avoid Storybook's
 own UI interfering with snapshots.
@@ -83,7 +85,7 @@ broadest range of issues.
 
 Read recommended script file(s) from `scripts/`, customize selector
 (replace `.target-element`, `.flex-container`, etc. with actual CSS selector
-for bugged element), inject via `chrome-devtools evaluate_script`.
+for bugged element), inject via `agent-browser eval --stdin`.
 
 Available scripts in `scripts/`:
 
@@ -107,11 +109,8 @@ Example workflow:
 ```bash
 # 1. Read the script
 # 2. Customize selector: change '.target-element' to '.my-tooltip'
-# 3. Inject the customized script
-chrome-devtools evaluate_script "() => {
-  let el = document.querySelector('.my-tooltip');
-  ...rest of script content...
-}"
+# 3. Inject the customized script (wrap arrow-function file and pipe via stdin)
+{ printf '('; cat scripts/computed-styles-dump.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 #### Script Usage Notes
@@ -122,7 +121,7 @@ no selector needed. Assumes object-of-arrays keyframe format
 array-of-objects format. Read logged animations via:
 
 ```bash
-chrome-devtools list_console_messages --pageSize 20 --types log
+agent-browser console
 ```
 
 **persistent-overlay.js** -- Use when automated clicks don't reproduce bug
@@ -130,17 +129,18 @@ chrome-devtools list_console_messages --pageSize 20 --types log
 events). Inject it, then ask user to interact manually in browser. After
 user interacts, read collected data and take screenshot.
 
-**visual-position-marker.js** -- Pass coordinates as args. Dot auto-removes
-after 3 seconds:
+**visual-position-marker.js** -- agent-browser eval takes no args; inline the
+coordinate values (e.g. `200`, `150`) into the script before piping. Dot
+auto-removes after 3 seconds:
 
 ```bash
-chrome-devtools evaluate_script "<script content>" --args 200 150
+{ printf '('; cat scripts/visual-position-marker.js; printf ')()'; } | agent-browser eval --stdin
 ```
 
 **scroll-tracking.js** -- Read results after interaction:
 
 ```bash
-chrome-devtools evaluate_script "() => JSON.stringify(window.__scrollLog)"
+agent-browser eval "JSON.stringify(window.__scrollLog)"
 ```
 
 #### Performance Traces
@@ -150,16 +150,17 @@ the issue (happens at compositor/paint level):
 
 ```bash
 # Start recording before the interaction
-chrome-devtools performance_start_trace --filePath /tmp/trace.json
+agent-browser trace start
 
 # Reproduce the bug (click, drag, scroll, etc.)
-chrome-devtools click "<uid>" --includeSnapshot true
+agent-browser click @e3
+agent-browser snapshot -i
 
 # Stop recording
-chrome-devtools performance_stop_trace --filePath /tmp/trace.json
+agent-browser trace stop /tmp/trace.json
 ```
 
-Trace file loads in Chrome DevTools (Performance tab) or
+Trace file loads in the browser's DevTools (Performance tab) or
 `chrome://tracing`. Look for:
 
 - Long frames (>16ms) causing visual jank
@@ -173,17 +174,17 @@ Test layout at different viewport widths when bug only appears at certain
 screen sizes:
 
 ```bash
-chrome-devtools resize_page 375 812     # Mobile (iPhone)
-chrome-devtools take_screenshot --filePath /tmp/mobile.png
+agent-browser set viewport 375 812     # Mobile (iPhone)
+agent-browser screenshot /tmp/mobile.png
 
-chrome-devtools resize_page 768 1024    # Tablet
-chrome-devtools take_screenshot --filePath /tmp/tablet.png
+agent-browser set viewport 768 1024    # Tablet
+agent-browser screenshot /tmp/tablet.png
 
-chrome-devtools resize_page 1280 800    # Desktop
-chrome-devtools take_screenshot --filePath /tmp/desktop.png
+agent-browser set viewport 1280 800    # Desktop
+agent-browser screenshot /tmp/desktop.png
 
-chrome-devtools resize_page 1920 1080   # Large desktop
-chrome-devtools take_screenshot --filePath /tmp/large-desktop.png
+agent-browser set viewport 1920 1080   # Large desktop
+agent-browser screenshot /tmp/large-desktop.png
 ```
 
 Between resizes, run `scripts/computed-styles-dump.js` on problematic element
@@ -195,28 +196,28 @@ use `scripts/viewport-responsive-check.js` after customizing the selector.
 Reproduce bug while instrumentation active.
 
 ```bash
-# Click elements by UID (from take_snapshot) -- use --includeSnapshot to get
-# updated a11y tree immediately after the click
-chrome-devtools click "<uid>" --includeSnapshot true
+# Click elements by ref (from snapshot), then re-snapshot to get the
+# updated a11y tree immediately after the click (refs go stale)
+agent-browser click @e3
+agent-browser snapshot -i
 
 # Take a snapshot after interaction to inspect DOM state changes
-chrome-devtools take_snapshot --verbose true
+agent-browser snapshot -i
 
 # Take screenshot only when visual confirmation is needed
-chrome-devtools take_screenshot --filePath /tmp/after-click.png
+agent-browser screenshot /tmp/after-click.png
 
 # Read injected console logs
-chrome-devtools list_console_messages --pageSize 20
-chrome-devtools get_console_message <msgid>
+agent-browser console
 ```
 
 Read collected data from window globals:
 
 ```bash
-chrome-devtools evaluate_script "() => JSON.stringify(window.__shifts)"
-chrome-devtools evaluate_script "() => JSON.stringify(window.__posLog)"
-chrome-devtools evaluate_script "() => JSON.stringify(window.__mutations)"
-chrome-devtools evaluate_script "() => JSON.stringify(window.__scrollLog)"
+agent-browser eval "JSON.stringify(window.__shifts)"
+agent-browser eval "JSON.stringify(window.__posLog)"
+agent-browser eval "JSON.stringify(window.__mutations)"
+agent-browser eval "JSON.stringify(window.__scrollLog)"
 ```
 
 Automated clicks don't reproduce bug (some libraries check
@@ -342,13 +343,13 @@ After locating file, apply fix pattern identified in Step 5.
 
 After applying code fix:
 
-1. Reload page: `chrome-devtools navigate_page --url "..."`
-2. Take snapshot to get fresh UIDs: `chrome-devtools take_snapshot --verbose true`
+1. Reload page: `agent-browser open "..."`
+2. Take snapshot to get fresh refs: `agent-browser snapshot -i`
 3. Re-inject verification scripts (position tracking, computed styles)
-4. Repeat interaction: `chrome-devtools click "<uid>" --includeSnapshot true`
-5. Take snapshot to confirm DOM state correct: `chrome-devtools take_snapshot --verbose true`
+4. Repeat interaction: `agent-browser click @e3` then `agent-browser snapshot -i`
+5. Take snapshot to confirm DOM state correct: `agent-browser snapshot -i`
 6. Confirm no position diffs, correct computed styles, correct z-index ordering
-7. Take final screenshot for visual proof: `chrome-devtools take_screenshot --filePath /tmp/fixed.png`
+7. Take final screenshot for visual proof: `agent-browser screenshot /tmp/fixed.png`
 8. Optionally ask user to verify manually for pointer-event-dependent bugs
 
 ### 8. Report to User
@@ -363,22 +364,23 @@ Present findings and resolution:
 
 ## Error Handling
 
-- Chrome DevTools connection fails? Run `chrome-devtools start` to start daemon
+- Browser connection fails? Run `agent-browser doctor` to diagnose
 - Diagnostic scripts fail to inject (e.g., CSP restrictions)? Inform user, suggest disabling CSP in dev environment
 - Automated clicks don't reproduce bug? Use `scripts/persistent-overlay.js`, ask user to interact manually
-- Element UIDs stale after page changes? Re-take snapshot with `chrome-devtools take_snapshot`
-- Suspected element can't be found by selector? Use `take_snapshot` to discover correct selector from a11y tree
+- Element refs stale after page changes? Re-take snapshot with `agent-browser snapshot -i`
+- Suspected element can't be found by selector? Use `agent-browser snapshot -i` to discover correct selector from a11y tree
 
 ## Important Notes
 
-- Prefer `take_snapshot` over `take_screenshot` for debugging. Snapshots provide structured a11y tree data with UIDs; screenshots only needed for visual confirmation.
-- All JavaScript snippets use `chrome-devtools evaluate_script`. Function must be arrow function returning JSON-serializable value.
+- Prefer `snapshot -i` over `screenshot` for debugging. Snapshots provide structured a11y tree data with element refs; screenshots only needed for visual confirmation.
+- All JavaScript snippets use `agent-browser eval` (inline expression) or `agent-browser eval --stdin` (piped script). Script files must be arrow functions returning a JSON-serializable value; wrap and pipe them via `{ printf '('; cat <file>.js; printf ')()'; } | agent-browser eval --stdin`.
 - Selectors in script files (`.target-element`, `.flex-container`) are placeholders -- customize them for the specific bug before injecting.
 - `position-tracking.js` runs a `requestAnimationFrame` loop continuing until page reload. Intentional for capturing intermittent shifts.
 - CSS-level fixes (Portals, containing block escapes) preferred over JavaScript workarounds for positioning bugs.
 - For single-frame flash/flicker timing races (element appears for one frame then disappears), use the `ah-fix-dom-flash` skill instead -- it has specialized detectors for that pattern.
-- When testing responsive bugs, use `chrome-devtools resize_page <width> <height>` to test multiple viewport sizes without manually resizing browser.
+- When testing responsive bugs, use `agent-browser set viewport <width> <height>` to test multiple viewport sizes without manually resizing browser.
 
 ## Quick Reference
 
-For full chrome-devtools command list and flags, invoke `/chrome-devtools-cli`.
+For the full agent-browser command list and flags, load the `agent-browser`
+skill and run `agent-browser skills get core`.
