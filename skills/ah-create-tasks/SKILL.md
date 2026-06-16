@@ -34,8 +34,11 @@ Two modes:
 ```bash
 BASE_BRANCH=$(git branch --show-current)
 REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
-PROGRESS_TEMPLATE="progress-tasks.md"
+PROGRESS_DIR=~/.agents/arinhub/progresses
+source "<skill_dir>/scripts/progress.sh"
 ```
+
+Progress is recorded as a deterministic append-only log written by `scripts/progress.sh` (sourced above, path resolved relative to this SKILL.md's directory) -- not an LLM-maintained markdown file. The `${PROGRESS_FILE}` path depends on the feature branch, which only exists after the Specifier creates it (create mode) or after `git checkout -b` (update mode), so `progress_init` is called there, not here.
 
 Determine **mode**:
 
@@ -80,10 +83,18 @@ If `MODE=update`:
    git checkout -b "${NEW_BRANCH_NAME}"
    SPEC_DIR="specs/${NEW_BRANCH_NAME}"
    SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
-   PROGRESS_FILE="~/.agents/arinhub/progresses/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+   PROGRESS_FILE="${PROGRESS_DIR}/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
    ```
 
-4. Initialize `${PROGRESS_FILE}` from template `references/${PROGRESS_TEMPLATE}`. Replace all `<PLACEHOLDER>` values with actual values. Mark Specifier and Spec Verifier sections as `status: skipped (update mode)`.
+4. Initialize the log and mark the create-only steps as skipped:
+
+   ```bash
+   progress_init "${PROGRESS_FILE}" "${NEW_BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMBER}"
+   progress_log "${PROGRESS_FILE}" 1 specifier "skipped(update)"
+   progress_log "${PROGRESS_FILE}" 2 spec-verifier "skipped(update)"
+   ```
+
+   `progress_init` writes the header only if the file does not exist (re-run leaves an existing log untouched). On a pre-existing log, inspect `grep '^step|' "${PROGRESS_FILE}"` and offer "Resume from step N, or restart?" (restart = `rm` then `progress_init`).
 
 5. Verify `${SPEC_DIR}` exists and contains `spec.md`. If not, create directory and report to user that new `spec.md` will be generated during Clarify step.
 
@@ -104,16 +115,17 @@ Spawn subagent **specifier** (Opus, low):
   NEW_BRANCH_NAME=$(git branch --show-current)
   SPEC_DIR="specs/${NEW_BRANCH_NAME}"
   SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
-  PROGRESS_FILE="~/.agents/arinhub/progresses/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+  PROGRESS_FILE="${PROGRESS_DIR}/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+  progress_init "${PROGRESS_FILE}" "${NEW_BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMBER}"
   ```
-- Initialize `${PROGRESS_FILE}` from template `references/${PROGRESS_TEMPLATE}`. Replace all `<PLACEHOLDER>` values with actual values (branch name, base branch, PRD path, ADR path, issue number, timestamp). Every subagent updates its own section after completing work.
+- Each step appends one `progress_log "${PROGRESS_FILE}" <n> <name> <status> [commit]` line (status: `done`, `skipped(update)`, `failed`). The helper stamps timestamps itself; no markdown sections are written.
 - After file generated, prepend this metadata block at very top of `spec.md` (before existing content):
   ```
   **Base Branch**: <BASE_BRANCH>
   **Issue Number**: <ISSUE_NUMBER>
   **Input**: <the distilled prompt>
   ```
-- Update `${PROGRESS_FILE}` Specifier section (status: completed, findings)
+- `progress_log "${PROGRESS_FILE}" 1 specifier done`
 
 ### 2. Commit
 
@@ -124,7 +136,7 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **spec-verifier** (Opus, low):
 
 - Prompt: `Act as a Senior Code Reviewer. Analyze spec.md in ${SPEC_DIR} and identify errors, logical gaps, or inconsistencies. If the spec.md references refactoring or existing codebases, perform a comparative analysis to ensure functional parity and identify any missing requirements. Fix all issues you find.`
-- Update `${PROGRESS_FILE}` Spec Verifier section
+- `progress_log "${PROGRESS_FILE}" 2 spec-verifier done`
 
 ### 4. Commit
 
@@ -148,7 +160,7 @@ If clarification asks questions needing user input, **wait for the user to respo
 
 Skip this prepend in create mode -- Step 1 already wrote the block there.
 
-Update `${PROGRESS_FILE}` Clarifier section.
+`progress_log "${PROGRESS_FILE}" 3 clarifier done`
 
 ### 6. Commit
 
@@ -164,7 +176,7 @@ Spawn subagent **planner** (Opus, low):
 
 - Provide `${ADR_PATH}` so subagent reads ADR directly for context
 - Run `/speckit.plan` with distilled prompt
-- Update `${PROGRESS_FILE}` Planner section
+- `progress_log "${PROGRESS_FILE}" 4 planner done`
 
 ### 8. Commit
 
@@ -175,7 +187,7 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **researcher** (Opus, low):
 
 - Prompt: `I want you to go through the implementation plan and implementation details in ${SPEC_DIR}, looking for areas that could benefit from additional research. For those areas that you identify that require further research, update the research document with additional details about the specific versions that we are going to be using in this application and spawn parallel research tasks to clarify any details using research from the web or context7 tool.`
-- Update `${PROGRESS_FILE}` Researcher section
+- `progress_log "${PROGRESS_FILE}" 5 researcher done`
 
 ### 10. Commit
 
@@ -192,7 +204,7 @@ After subagent returns, present findings to user yourself (not in subagent) and 
 Once user responds, spawn subagent **complexity-fixer** (Opus, low):
 
 - Prompt: `Fix the following issues in ${SPEC_DIR}: <list of user-selected issues from complexity-checker findings>`
-- Update `${PROGRESS_FILE}` Complexity Checker section
+- `progress_log "${PROGRESS_FILE}" 6 complexity-checker done`
 
 ### 12. Commit
 
@@ -203,14 +215,14 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **checklist-generator** (Opus, low):
 
 - Run `/speckit.checklist` with prompt: `full breadth pre-implementation checklist, exclude the general spec-quality items already covered in requirements.md and focus only on domain-specific requirement gaps`
-- Update `${PROGRESS_FILE}` Checklist Generator section
+- `progress_log "${PROGRESS_FILE}" 7 checklist-generator done`
 
 ### 14. Check Checklist
 
 Spawn subagent **checklist-checker** (Opus, low):
 
 - Prompt: `Read the checklist in ${SPEC_DIR}, and check off each item in the checklist if the feature spec meets the criteria. Leave it empty if it does not. Fix all gaps.`
-- Update `${PROGRESS_FILE}` Checklist Checker section
+- `progress_log "${PROGRESS_FILE}" 8 checklist-checker done`
 
 ### 15. Commit
 
@@ -221,7 +233,7 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **tasks-generator** (Opus, low):
 
 - Run `/speckit.tasks`
-- Update `${PROGRESS_FILE}` Tasks Generator section
+- `progress_log "${PROGRESS_FILE}" 9 tasks-generator done`
 
 ### 17. Commit
 
@@ -232,7 +244,7 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **tasks-analyzer** (Opus, low):
 
 - Run `/speckit.analyze` with prompt: `if there are any issues fix all`
-- Update `${PROGRESS_FILE}` Tasks Analyzer (pass 1) section
+- `progress_log "${PROGRESS_FILE}" 10 tasks-analyzer-1 done`
 
 ### 19. Commit
 
@@ -243,7 +255,7 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 Spawn subagent **tasks-analyzer-2** (Opus, low):
 
 - Run `/speckit.analyze` with prompt: `if there are any issues fix all`
-- Update `${PROGRESS_FILE}` Tasks Analyzer (pass 2) section
+- `progress_log "${PROGRESS_FILE}" 11 tasks-analyzer-2 done` then `progress_done "${PROGRESS_FILE}" completed`
 
 ### 21. Commit (Final)
 
@@ -314,7 +326,7 @@ Each arrow includes a `/commit` step (not shown for brevity).
 
 - Every subagent runs on Opus with low effort mode.
 - Steps 5 (clarify) and 11 (complexity check) require user interaction -- workflow pauses and waits for user input before continuing.
-- `${PROGRESS_FILE}` serves as running audit trail. Each subagent updates its section immediately after finishing, so you can always see what is done and what remains.
+- `${PROGRESS_FILE}` is an append-only log written by `scripts/progress.sh`, not an LLM-maintained markdown file. Each step appends one `progress_log` line; timestamps come from `date` inside the helper. View it with `progress_render "${PROGRESS_FILE}"`.
 - All Spec Kit output files saved to `specs/<NEW_BRANCH_NAME>/`.
-- If any subagent fails, note failure in `${PROGRESS_FILE}` and report to user before continuing. Do not silently skip steps.
+- If any subagent fails, log it with `progress_log ... failed` and report to user before continuing. Do not silently skip steps.
 - `/commit` creates conventional commit with descriptive message based on staged changes. Committer subagent should not do anything beyond creating the commit.

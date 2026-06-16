@@ -96,6 +96,11 @@ sequentially launches one subagent per phase. Each phase is guarded by
 retry + stuck-detection: after at most `max-retries` attempts (default 2) with no new commit or
 artifact change, it records the failure and escalates to you instead of looping.
 
+Progress is tracked in a deterministic append-only log (one line per step, written by each skill's
+`scripts/progress.sh` helper rather than maintained as prose by the model, keeping it out of the
+token budget) under `~/.agents/arinhub/progresses/`. Re-running a skill detects the existing log and
+offers to resume from the last incomplete step.
+
 Optional directives: `mode feature|update` (default `feature`; `update` forwards to `ah-create-tasks`'s
 update mode and needs a `spec number` + `branch prefix`), `dry-run` (plan only, launch nothing),
 `skip <phase>`, `max-retries N`, `resume`.

@@ -11,8 +11,8 @@ server, outputs) and the auxiliary `ah-*` skills. Whenever you change the
 pipeline — phase order, the skill run in a phase, inputs propagated between
 phases, the dev-server preflight, or produced artifacts — update
 `ARCHITECTURE.md` (and its mermaid diagram) in the same change so it never
-drifts from `skills/ah-workflow/SKILL.md` and
-`skills/ah-workflow/references/progress-workflow.md`.
+drifts from `skills/ah-workflow/SKILL.md` and the progress log helper
+`skills/ah-workflow/scripts/progress.sh`.
 
 ## Writing & editing SKILL.md files (token optimization)
 

@@ -9,7 +9,9 @@ The center of the architecture is **`ah-workflow`**, which is both the **entry p
 (each phase skill is itself a multi-step workflow), and carries the right inputs forward between
 them. A workflow progress file is the source of truth that records each phase's result and anchors
 the run via the `/goal` command, with per-phase retry + escalation so a stuck phase never loops
-forever.
+forever. Progress is a deterministic append-only log written by each skill's `scripts/progress.sh`
+helper (one line per step, timestamps from `date`) rather than an LLM-maintained markdown file, to
+keep progress tracking out of the token budget.
 
 Alongside the pipeline, several **auxiliary `ah-*` skills** operate on an already-existing
 PR or branch (review, submit review, resolve review threads, verify requirements coverage) or

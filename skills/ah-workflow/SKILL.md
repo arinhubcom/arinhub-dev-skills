@@ -23,9 +23,12 @@ completion goal without spinning forever on a phase that can't progress.
   job is to invoke the corresponding `ah-*` skill and report back the artifacts it produced.
 - **Phase skills don't need a committer here**: each `ah-*` phase skill already runs its
   own `committer` subagent internally, so this orchestrator does not commit on its own.
-- **Progress file is the source of truth**: every phase result is written to the workflow progress
-  file. That file is also what the `/goal` evaluator reads (see "Anchor the run with /goal"), so after
-  each phase, echo the relevant part of it into the conversation.
+- **Progress file is the source of truth**: every phase result is appended to the workflow progress
+  log by `scripts/progress.sh` (a deterministic shell helper, not an LLM-maintained markdown file).
+  That log is also what the `/goal` evaluator reads (see "Anchor the run with /goal"), so after each
+  phase, echo its rendering (`progress_render`) into the conversation. Each phase line carries the
+  phase status, attempt count, and its artifact paths -- the load-bearing fields the evaluator and the
+  next phase consume.
 
 ## The pipeline
 
@@ -82,7 +85,7 @@ Parse optional directives:
   either is missing, ask for it now, before doing anything else -- update mode's phase 2
   needs both and would otherwise stall mid-run.
 - `dry-run` -- plan only, run nothing (see "Dry run").
-- `skip <phase>` -- skip a named phase (e.g. `skip finalize`). Mark it `skipped (user request)`.
+- `skip <phase>` -- skip a named phase (e.g. `skip finalize`). Log it `skipped(user)`.
 - `max-retries N` -- per-phase attempt cap (default 2).
 - `resume` / `restart` -- how to handle an existing progress file.
 
@@ -92,7 +95,7 @@ ISSUE_NUMBER="<issue number from the user>"
 BASE_BRANCH="<base branch from the user>"
 PROGRESS_DIR=~/.agents/arinhub/progresses
 PROGRESS_FILE="${PROGRESS_DIR}/progress-workflow-${REPO_NAME}-${ISSUE_NUMBER}.md"
-mkdir -p "${PROGRESS_DIR}"
+source "<skill_dir>/scripts/progress.sh"
 ```
 
 The progress file is keyed by issue number rather than branch (the other `ah-*` skills key on branch),
@@ -100,15 +103,22 @@ because at workflow start no feature branch exists yet -- phase 2 creates it.
 
 #### Initialize the progress file
 
-Read `references/progress-workflow.md`, replace the `<REPO_NAME>`, `<ISSUE_NUMBER>`, `<BASE_BRANCH>`,
-`<FEATURE_DESCRIPTION>`, `<MAX_RETRIES>`, and `<TIMESTAMP>` placeholders
-(`TIMESTAMP` from `date`), and write to `${PROGRESS_FILE}`.
+Progress is a deterministic append-only log written by `scripts/progress.sh` (sourced above, path
+resolved relative to this SKILL.md's directory) -- not an LLM-maintained markdown file. The feature
+branch does not exist yet, so the log is keyed by issue number; pass it as the branch field for now:
+
+```bash
+progress_init "${PROGRESS_FILE}" "issue-${ISSUE_NUMBER}" "${BASE_BRANCH}" "${ISSUE_NUMBER}"
+```
+
+`progress_init` stamps `meta|started` from `date` and writes the header only when the file does not
+yet exist.
 
 If `${PROGRESS_FILE}` already exists and `restart` was not requested:
 
-- **Resume**: show which phases are done and ask "Resume from phase N, or restart?" On resume, skip
-  completed phases.
-- **Restart**: overwrite with a fresh template.
+- **Resume**: inspect `grep '^step|' "${PROGRESS_FILE}"`, show which phases are done, and ask "Resume
+  from phase N, or restart?" On resume, skip completed phases.
+- **Restart**: `rm "${PROGRESS_FILE}"` and call `progress_init` again.
 
 ### Anchor the run with /goal
 
@@ -121,7 +131,7 @@ outermost runaway guard:
 
 Pick `T` as roughly `(remaining phases) x (max-retries) + 4` for headroom. Why this works: the `/goal`
 evaluator only sees what's in the conversation and never runs tools, so after every phase you must echo
-that phase's progress-file section into the conversation -- that's what lets the evaluator judge
+`progress_render "${PROGRESS_FILE}"` into the conversation -- that's what lets the evaluator judge
 "complete". The `or stop after <T> turns` clause is the tripwire that stops the session even if the
 per-phase guards below somehow fail.
 
@@ -146,9 +156,14 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
      the `branch prefix` (exported as `GIT_BRANCH_PREFIX`) in the inputs -- so it skips re-specify and
      branches as `<prefix>/<spec>-<desc>`. In `feature` mode, pass nothing extra (the default).
    - Phases 3, 4: nothing extra -- the skill reads `spec.md`. Just name the spec dir if helpful.
-3. **Capture outputs** into the progress file: artifact paths, status, attempt count. After phase 2,
-   also record the new branch name (`git branch --show-current`).
-4. **Echo** the updated phase section into the conversation (for the `/goal` evaluator).
+3. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
+   attempt count in the `extra` field:
+   `progress_log "${PROGRESS_FILE}" <k> <phase-name> <status> <attempts> "<artifact paths>"`
+   (status: `done`, `skipped(user)`, `failed`). Phase 1 -> PRD + ADR paths; phase 2 -> feature branch
+   (`git branch --show-current`) + spec dir; phase 3 -> commits / tasks.md completion; phase 4 -> PR URL.
+   After the final phase, `progress_done "${PROGRESS_FILE}" completed`.
+4. **Echo** the log into the conversation with `progress_render "${PROGRESS_FILE}"` (for the `/goal`
+   evaluator, which only sees the conversation).
 5. **Verify progress** and decide retry vs. escalate (next section).
 
 ### Anti-loop / stuck detection
@@ -166,8 +181,8 @@ just burn turns. Stop retrying that phase.
 
 When attempts are exhausted **or** the phase is detected stuck:
 
-- Write the failure into the workflow progress file with what was tried and the last error (the `ah-*`
-  convention is "do not silently skip steps").
+- Log the failure with `progress_log "${PROGRESS_FILE}" <k> <phase-name> failed <attempts> "<last error>"`
+  (the `ah-*` convention is "do not silently skip steps").
 - **Escalate to the user** -- report what's blocked and ask how to proceed. Do not loop, and do not
   silently continue to the next phase.
 
@@ -194,5 +209,5 @@ unfinished one. Completed phases (and their commits, done inside the phase skill
 ### Report
 
 When the pipeline finishes (or stops at an escalation), print a final summary: the status of each
-phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4. Echo the full progress file one last time so the `/goal` evaluator can
+phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4. Echo `progress_render "${PROGRESS_FILE}"` one last time so the `/goal` evaluator can
 confirm completion and clear the goal.

@@ -86,12 +86,21 @@ If repo is a monorepo (multiple `package.json` files, workspace config in root `
 
 #### Initialize progress file
 
-Read template from `references/progress-implement.md`, replace all `<BRANCH_NAME>`, `<BASE_BRANCH>`, `<ISSUE_NUMBER>`, `<TECH_STACK>`, `<TIMESTAMP>` placeholders with actual values, write to `${PROGRESS_FILE}`.
+Progress is recorded as a deterministic append-only log written by a shell helper -- not an LLM-maintained markdown file. Source the helper (resolve path relative to this SKILL.md's directory) and initialize:
 
-If `${PROGRESS_FILE}` already exists:
+```bash
+source "<skill_dir>/scripts/progress.sh"
+progress_init "${PROGRESS_FILE}" "${BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMBER}"
+```
 
-- **Resume**: If some steps completed, show progress and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
-- **Restart**: Overwrite with fresh template.
+`progress_init` writes the header only when the file does not yet exist, so a re-run leaves an existing log untouched.
+
+If `${PROGRESS_FILE}` already existed before this run:
+
+- **Resume**: Inspect completed steps with `grep '^step|' "${PROGRESS_FILE}"`. If some steps are logged `done`/`skipped(...)`, show them and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
+- **Restart**: `rm "${PROGRESS_FILE}"` and call `progress_init` again for a fresh log.
+
+Record each step with `progress_log "${PROGRESS_FILE}" <n> <name> <status> [commit]` (status: `done`, `skipped(user)`, `skipped(none)`, `failed`). The helper stamps timestamps itself.
 
 #### Compute merge base
 
@@ -119,7 +128,7 @@ If `${SPEC_DIR}/checklists/` exists, scan all checklist files:
 - **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If user declines, halt execution.
 - **If all complete or no checklists directory**: Proceed automatically.
 
-Update `${PROGRESS_FILE}` Checklists section.
+`progress_log "${PROGRESS_FILE}" 1 checklists done` (or `skipped(user)` if skipped).
 
 ### 2. Load Implementation Context
 
@@ -168,7 +177,7 @@ Source: @tanstack/react-query (npx opensrc)
 Codebase: src/components/**, src/hooks/** (npx repomix, compressed)
 ```
 
-Update `${PROGRESS_FILE}` Context Loading section with full list of loaded contexts.
+`progress_log "${PROGRESS_FILE}" 2 context done` (or `skipped(user)` if skipped).
 
 ### 3. Execute Implementation (Pass 1)
 
@@ -186,7 +195,7 @@ Spawn subagent **implementer** (Opus, low):
 
 **Available tools during implementation** -- all external tools from Configuration section available. Use as needed, not mandatory.
 
-After subagent completes, update `${PROGRESS_FILE}` Implementation Pass 1 section with tasks completed, tasks remaining, tools used, any errors.
+After subagent completes, `progress_log "${PROGRESS_FILE}" 3 implement-pass-1 done <commit>` (use `failed` if the pass errored). Per-step prose (tasks completed/remaining, tools used) goes into the final report, not the log.
 
 Spawn subagent **committer** (Opus, low): Run `/commit`.
 
@@ -206,7 +215,7 @@ Read `${SPEC_DIR}/tasks.md`, check whether all tasks marked `[X]`.
    - Include specific diagnosis and hints for failing tasks
    - Run `/speckit.implement` -- picks up uncompleted tasks automatically because only `[ ]` tasks remain
    - Same external tools available as in pass 1
-4. Update `${PROGRESS_FILE}` Implementation Pass N section.
+4. `progress_log "${PROGRESS_FILE}" <3+N> implement-pass-N done <commit>` (or `failed`).
 5. Spawn subagent **committer** (Opus, low): Run `/commit`.
 6. Re-read `tasks.md` -- if all complete, break out of retry loop.
 
@@ -219,7 +228,7 @@ Read `${SPEC_DIR}/tasks.md`, check whether all tasks marked `[X]`.
 
 Present summary:
 
-- Path to `${PROGRESS_FILE}` with full audit trail
+- Path to `${PROGRESS_FILE}` plus a compact rendering via `progress_render "${PROGRESS_FILE}"`
 - Completed tasks by phase (Setup, Tests, Core, Integration, Polish)
 - Any failures or skipped tasks with reasons
 - How many passes needed (1, 2, or 3)
@@ -263,9 +272,9 @@ Present summary:
 ## Important Notes
 
 - Every subagent runs Opus, low. `committer` only creates a commit via `/commit`.
-- `${PROGRESS_FILE}` is a running audit trail. Each step updates its section immediately after finishing.
-- **Resume support**: Re-running detects existing progress file, offers resume from last incomplete step. Completed steps and their commits skipped.
-- **Duration tracking**: Each subagent records start/end timestamps, computes duration (e.g., `duration: 2m 34s`).
+- `${PROGRESS_FILE}` is an append-only log written by `scripts/progress.sh`, not an LLM-maintained markdown file. Each step appends one `progress_log` line; no markdown re-reads/re-writes.
+- **Resume support**: Re-running detects the existing log via `grep '^step|'`, offers resume from last incomplete step. Completed steps and their commits skipped.
+- **Timestamps**: The helper stamps each line from `date` -- the model never supplies timestamps or durations.
 - **Tech stack detection** informs which best-practice skills load. React/Next.js gets full set; other frontend frameworks get component-building guidance; non-frontend skips context loading entirely.
 - **External tools are situational**: Tools in Configuration section available but not mandatory every run. Use when they add value -- unfamiliar APIs, visual UI work, deep dependency integration, large codebase scope. Skip for straightforward tasks.
 - **Monorepo support**: If repo is a monorepo, commands scoped to target application identified from tasks.md or changed file paths.

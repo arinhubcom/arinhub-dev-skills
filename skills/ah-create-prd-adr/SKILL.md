@@ -34,6 +34,8 @@ REPO_NAME=$(basename -s .git "$(git remote get-url origin 2>/dev/null)")
 # Fallback when the repo has no 'origin' remote:
 [ -z "$REPO_NAME" ] && REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
 mkdir -p ~/.agents/prds ~/.agents/adrs
+PROGRESS_DIR=~/.agents/arinhub/progresses
+source "<skill_dir>/scripts/progress.sh"
 ```
 
 - Translate the description to **English** (all document content is written in English). Keep
@@ -43,6 +45,12 @@ mkdir -p ~/.agents/prds ~/.agents/adrs
 - Compute the two paths and reuse them throughout:
   - `PRD_PATH=~/.agents/prds/prd-${REPO_NAME}-${FEATURE}.md`
   - `ADR_PATH=~/.agents/adrs/adr-${REPO_NAME}-${FEATURE}.md`
+- Initialize the progress log (keyed by feature slug, since this skill has no branch yet):
+  - `PROGRESS_FILE="${PROGRESS_DIR}/progress-prd-adr-${REPO_NAME}-${FEATURE}.md"`
+  - `progress_init "${PROGRESS_FILE}" "${FEATURE}" "" ""`
+
+  Progress is a deterministic append-only log written by `scripts/progress.sh` (path resolved
+  relative to this SKILL.md's directory), not an LLM-maintained markdown file.
 
 If a file already exists at either path, tell the user it will be overwritten and confirm
 before continuing.
@@ -72,6 +80,8 @@ Read `references/prd-template.md` and write `PRD_PATH` following it exactly. The
   Avoid vague words like "fast", "easy", or "intuitive" -- attach numbers or observable
   behavior instead.
 
+After writing it: `progress_log "${PROGRESS_FILE}" 1 prd done "" "${PRD_PATH}"`.
+
 ### Step 3 - Generate the ADR
 
 Read the PRD you just wrote at `PRD_PATH` for context, then read `references/adr-template.md`
@@ -85,6 +95,8 @@ and write `ADR_PATH` following it exactly. The file must:
 - Stay consistent with the PRD: the decision must satisfy the PRD's requirements and
   constraints. Reference the PRD in the References section.
 
+After writing it: `progress_log "${PROGRESS_FILE}" 2 adr done "" "${ADR_PATH}"`.
+
 ### Step 4 - Report
 
 Print a short summary:
@@ -93,6 +105,8 @@ Print a short summary:
 - A one-line description of the feature.
 - A note that the pair can now be fed into `ah create tasks` (which takes a PRD path, an ADR
   path, and an issue number).
+
+Then mark the run complete: `progress_done "${PROGRESS_FILE}" completed`.
 
 ## Important Notes
 
