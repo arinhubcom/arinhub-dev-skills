@@ -1,7 +1,7 @@
 ---
 name: ah-workflow
 description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", "ah full workflow", or given a GitHub issue URL to take from issue to PR (e.g. "ah workflow https://github.com/org/repo/issues/42"). Takes either a feature description + an issue number + a base branch, OR a GitHub issue URL (it then resolves those inputs from the issue via references/resolve-gh-issue.md, auto-classifying the issue as a new feature or an update). Sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-finalize-code (which creates the PR). Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature or a GitHub issue from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
-argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode feature|update [default feature], spec number [required when mode=update], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
+argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode create|update [default create], spec number [required when mode=update, optional in create mode to pin the branch number], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
 ---
 
 # AH Workflow
@@ -50,14 +50,14 @@ and issue number into `spec.md`, so phases 3-4 read those themselves -- you don'
 through again. Subagents share the working directory, so the branch phase 2 creates stays checked out
 for every later phase.
 
-**Mode (feature vs update):** this orchestrator accepts an optional `mode` -- `feature`
+**Mode (create vs update):** this orchestrator accepts an optional `mode` -- `create`
 (default) or `update`. It only changes phase 2: in `update` mode the phase-2 subagent runs
 `ah-create-tasks` in *its* update mode (skip re-specify, start from clarify), which needs a
 `spec number` and a `branch prefix`. Everything else is identical -- phase 1
 (`ah-create-prd-adr`) still runs in both modes (update mode distills its clarify prompt from
 the PRD), and the base-branch checkout before phase 2 happens in both modes
 (`ah-create-tasks` reads the base from the current branch even in update mode). Default to
-`feature` when no mode is given, so existing behavior is unchanged.
+`create` when no mode is given, so existing behavior is unchanged.
 
 ## Procedure
 
@@ -80,10 +80,11 @@ before doing anything else -- the base branch in particular is never guessed (sa
 
 Parse optional directives:
 
-- `mode feature|update` -- which pipeline mode to run (default `feature`). In `update`
+- `mode create|update` -- which pipeline mode to run (default `create`). In `update`
   mode, also collect a `spec number` (e.g. `001`) and a `branch prefix` (e.g. `jj`); if
   either is missing, ask for it now, before doing anything else -- update mode's phase 2
-  needs both and would otherwise stall mid-run.
+  needs both and would otherwise stall mid-run. In `create` mode a `spec number` is
+  optional: pass it through to pin the feature branch number, but never prompt for it.
 - `dry-run` -- plan only, run nothing (see "Dry run").
 - `skip <phase>` -- skip a named phase (e.g. `skip finalize`). Log it `skipped(user)`.
 - `max-retries N` -- per-phase attempt cap (default 2).
@@ -154,7 +155,9 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
      two paths, per `ah-create-tasks`'s feature-name input.) **In `update` mode**, additionally tell
      the subagent to run `ah-create-tasks` in update mode -- i.e. include `update <spec-number>` and
      the `branch prefix` (exported as `GIT_BRANCH_PREFIX`) in the inputs -- so it skips re-specify and
-     branches as `<prefix>/<spec>-<desc>`. In `feature` mode, pass nothing extra (the default).
+     branches as `<prefix>/<spec>-<desc>`. In `create` mode, pass nothing extra (the default)
+     unless a `spec number` was resolved -- then pass it too, so `ah-create-tasks` pins the
+     feature branch number (`jj/<spec>-<desc>`) instead of auto-detecting it.
    - Phases 3, 4: nothing extra -- the skill reads `spec.md`. Just name the spec dir if helpful.
 3. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
    attempt count in the `extra` field:
@@ -193,8 +196,9 @@ stops at `T` turns.
 
 If `dry-run` was passed, do not launch any subagent. Instead print:
 
-- the resolved inputs (repo, issue number, base branch, mode -- and in update mode the
-  spec number and branch prefix -- plus the derived feature slug -- 2-5 words, lowercase,
+- the resolved inputs (repo, issue number, base branch, mode -- the spec number and branch
+  prefix in update mode, and the spec number too if one was supplied in create mode --
+  plus the derived feature slug -- 2-5 words, lowercase,
   hyphen-separated, matching `ah-create-prd-adr`'s convention),
 - the four phases in order with the input each will receive,
 - the target artifact paths (PRD, ADR, spec dir, progress file).

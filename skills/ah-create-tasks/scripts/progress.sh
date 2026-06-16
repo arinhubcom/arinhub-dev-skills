@@ -32,6 +32,17 @@ _progress_now() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+# progress_path <skill> <repo> <key>
+# Builds the standard progress-file path (progress-<skill>-<repo>-<key>.md),
+# sanitizing <key> (typically a branch name) by turning '/' into '-'. Single
+# source of truth so callers never re-derive the path inline.
+progress_path() {
+  local skill="$1" repo="$2" key="$3"
+  local safe
+  safe=$(printf '%s' "${key}" | tr '/' '-')
+  printf '%s/progress-%s-%s-%s.md' "$(_progress_dir)" "${skill}" "${repo}" "${safe}"
+}
+
 # progress_init <file> <branch> <base> <issue>
 # Writes the header + meta lines only when <file> does not yet exist, so a
 # re-run leaves an existing log untouched (enables grep-based resume).

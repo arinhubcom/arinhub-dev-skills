@@ -11,7 +11,7 @@ Do this in the **main session**, not a subagent -- it may need to ask the user f
 branch, spec number, or branch prefix, and those answers must reach the orchestrator.
 
 **Override precedence**: any value the user passed explicitly to `ah-workflow` (a base
-branch, `mode feature|update`, a spec number, a branch prefix) wins over whatever the issue
+branch, `mode create|update`, a spec number, a branch prefix) wins over whatever the issue
 implies. The order in each step below already encodes "explicit arg > issue marker/labels >
 default".
 
@@ -66,22 +66,22 @@ In order (explicit, then marker, then default):
 4. Only if all three fail, ask the user. Never guess silently -- the base branch decides
    where the PR targets (same discipline as `ah-create-pr`).
 
-## 5. Classify the mode (feature vs update)
+## 5. Classify the mode (create vs update)
 
-A **feature** adds new capability; an **update** fixes or refactors existing behavior. The
-mode flows down to `ah-create-tasks` (update mode skips re-specifying). Classify
+A **create** issue adds new capability; an **update** fixes or refactors existing behavior.
+The mode flows down to `ah-create-tasks` (update mode skips re-specifying). Classify
 labels-first:
 
 1. **Labels** (primary signal):
    - `bug`, `bugfix`, `fix`, `refactor`, `refactoring`, `chore` -> `update`
-   - `feature`, `enhancement`, `feat` -> `feature`
+   - `feature`, `enhancement`, `feat` -> `create`
 2. **Body/title** (fallback when labels are missing or point both ways): judge intent -- a
-   request for something new -> `feature`; fixing, correcting, or restructuring existing
+   request for something new -> `create`; fixing, correcting, or restructuring existing
    code/behavior -> `update`.
 3. A user-supplied **mode override** wins over both.
 
 Echo the decision with its evidence, e.g. `mode=update (label: bug)` or
-`mode=feature (no labels; title describes a new export view)`, so the choice is auditable
+`mode=create (no labels; title describes a new export view)`, so the choice is auditable
 before the (expensive) pipeline starts.
 
 ## 6. Update-mode extras (only when mode = update)
@@ -100,14 +100,14 @@ For a **feature**, skip this step.
 
 Print a short summary so the user can confirm the resolved inputs -- issue URL + title,
 chosen base branch (and how it was resolved: explicit / marker / default), classified mode
-+ evidence, and (update mode) the spec number and branch prefix -- then hand
-`ah-workflow` these values:
++ evidence, and the spec number and branch prefix (always in update mode; the spec number
+too -- outside update mode -- if the user supplied one) -- then hand `ah-workflow` these values:
 
 - feature description
 - issue number (`NUMBER`)
 - base branch (`BASE_BRANCH`)
-- mode (`feature` | `update`)
-- spec number and branch prefix (update mode only)
+- mode (`create` | `update`)
+- spec number and branch prefix (required in update mode; outside update mode the spec number is optional -- pass it through when supplied so `ah-create-tasks` pins the branch number in its create mode)
 
 `ah-workflow` resumes step 0 with these -- it builds its progress file (keyed by issue
 number), runs the dev-server preflight, anchors the run with `/goal`, and drives the six

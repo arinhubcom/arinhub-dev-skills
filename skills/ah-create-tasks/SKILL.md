@@ -1,7 +1,7 @@
 ---
 name: ah-create-tasks
 description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". Runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step. Also supports "update" mode (e.g., "ah create tasks update 001") which skips initial specify/verify steps, creates a new branch, and starts from clarify.
-argument-hint: "a feature name (derives default prd/adr paths) or explicit prd.md and adr.md paths, optionally 'update <spec-number>' for update mode"
+argument-hint: "a feature name (derives default prd/adr paths) or explicit prd.md and adr.md paths, optionally 'update <spec-number>' for update mode, or a bare <spec-number> in create mode to pin the branch number"
 ---
 
 # Create Tasks from PRD and ADR
@@ -10,7 +10,7 @@ Orchestrate full Spec Kit pipeline. Transform `prd.md` + `adr.md` into well-stru
 
 Two modes:
 
-- **Create mode** (default): full pipeline, specify through task generation.
+- **Create mode** (default): full pipeline, specify through task generation. Optionally accepts a spec number to pin the feature branch number (`jj/<spec>-<desc>`) instead of letting `/speckit.specify` auto-detect it.
 - **Update mode**: requires spec number (e.g., `001`). Creates new git branch, skips steps 1-4 (specify/verify), starts from Clarify using PRD to generate clarification prompt.
 
 ## Input
@@ -20,7 +20,7 @@ Two modes:
 - **adr.md path** (required unless **feature name** given): path to ADR (Architectural Decision Records) describing architectural decisions, constraints, rationale. If neither this nor feature name given, ask before proceeding.
 - **issue number** (required): GitHub issue number for this feature (e.g., `42`). If not provided, ask before proceeding.
 - **mode** (optional): `update` to skip steps 1-4 and start from Clarify. Default create (full pipeline).
-- **spec number** (required in update mode): spec number (e.g., `001`). Used to construct branch name.
+- **spec number** (required in update mode, optional in create mode): spec number (e.g., `001`). In update mode it is used to construct the branch name. In create mode, when supplied, it pins the feature branch number (`jj/<spec>-<desc>`) via `/speckit.specify`'s `--number` flag instead of letting the script auto-detect it. Strictly non-interactive in create mode: only used if already supplied; never prompted for.
 
 ## Configuration
 
@@ -34,7 +34,6 @@ Two modes:
 ```bash
 BASE_BRANCH=$(git branch --show-current)
 REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
-PROGRESS_DIR=~/.agents/arinhub/progresses
 source "<skill_dir>/scripts/progress.sh"
 ```
 
@@ -43,7 +42,7 @@ Progress is recorded as a deterministic append-only log written by `scripts/prog
 Determine **mode**:
 
 - If user said "update" and gave spec number, set `MODE=update`, store spec number as `SPEC_NUMBER`.
-- Otherwise set `MODE=create`.
+- Otherwise set `MODE=create`. If the user also supplied a bare spec number (e.g., `007`), store it as `SPEC_NUMBER` (optional in create mode -- it pins the branch number in Step 1). If none was supplied, leave `SPEC_NUMBER` empty; do not prompt for it.
 
 Resolve `PRD_PATH` and `ADR_PATH`:
 
@@ -57,7 +56,7 @@ Resolve `PRD_PATH` and `ADR_PATH`:
 
 - If user gave explicit paths, use those (override feature-name default).
 
-If user gave neither explicit paths nor feature name, and no **issue number**, ask for all missing values now (before any other work). In update mode, also ask for **spec number** if not provided. Store as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (update mode) `SPEC_NUMBER`.
+If user gave neither explicit paths nor feature name, and no **issue number**, ask for all missing values now (before any other work). In update mode, also ask for **spec number** if not provided. In create mode, never ask for a spec number -- it is optional there and only used if already supplied. Store as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (update mode) `SPEC_NUMBER`.
 
 Verify `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either missing, ask user for correct path or feature name.
 
@@ -82,8 +81,7 @@ If `MODE=update`:
    NEW_BRANCH_NAME="${GIT_BRANCH_PREFIX}/${SPEC_NUMBER}-${BRANCH_DESCRIPTION}"
    git checkout -b "${NEW_BRANCH_NAME}"
    SPEC_DIR="specs/${NEW_BRANCH_NAME}"
-   SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
-   PROGRESS_FILE="${PROGRESS_DIR}/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+   PROGRESS_FILE=$(progress_path tasks "${REPO_NAME}" "${NEW_BRANCH_NAME}")
    ```
 
 4. Initialize the log and mark the create-only steps as skipped:
@@ -110,12 +108,24 @@ Spawn subagent **specifier** (Opus, low):
 
 - Provide `${PRD_PATH}` so subagent reads PRD directly for context
 - Run `/speckit.specify` with distilled prompt
+- **Branch numbering**: If `${SPEC_NUMBER}` is set, you MUST pass `--number ${SPEC_NUMBER}` to `create-new-feature.sh` when running `/speckit.specify`, so the branch is numbered `jj/${SPEC_NUMBER}-<short-name>` instead of auto-detected. The `speckit.specify` command normally instructs "Do NOT pass `--number`"; this instruction overrides that -- pass it. If the branch already exists, `git checkout -b` will fail; surface that error to the user rather than retrying blindly. If `${SPEC_NUMBER}` is unset, do not pass `--number` (speckit auto-detects the next number, today's behavior).
 - After `/speckit.specify` completes, it created a new branch. Capture it:
   ```bash
   NEW_BRANCH_NAME=$(git branch --show-current)
+  # Guard: /speckit.specify must have created and checked out a NEW feature branch.
+  # If it failed (e.g. --number collided with an existing branch), HEAD is still
+  # the base branch -- abort rather than write progress/specs onto the wrong branch.
+  if [ "${NEW_BRANCH_NAME}" = "${BASE_BRANCH}" ]; then
+    echo "ERROR: still on base branch '${BASE_BRANCH}' -- /speckit.specify did not create a feature branch. Stop and report to the user." >&2
+    exit 1
+  fi
+  # When a spec number was requested, the new branch must carry it.
+  if [ -n "${SPEC_NUMBER}" ] && ! printf '%s' "${NEW_BRANCH_NAME}" | grep -q "${SPEC_NUMBER}"; then
+    echo "ERROR: branch '${NEW_BRANCH_NAME}' does not contain requested spec number '${SPEC_NUMBER}'. Stop and report to the user." >&2
+    exit 1
+  fi
   SPEC_DIR="specs/${NEW_BRANCH_NAME}"
-  SAFE_BRANCH_NAME=$(echo "${NEW_BRANCH_NAME}" | tr '/' '-')
-  PROGRESS_FILE="${PROGRESS_DIR}/progress-tasks-${REPO_NAME}-${SAFE_BRANCH_NAME}.md"
+  PROGRESS_FILE=$(progress_path tasks "${REPO_NAME}" "${NEW_BRANCH_NAME}")
   progress_init "${PROGRESS_FILE}" "${NEW_BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMBER}"
   ```
 - Each step appends one `progress_log "${PROGRESS_FILE}" <n> <name> <status> [commit]` line (status: `done`, `skipped(update)`, `failed`). The helper stamps timestamps itself; no markdown sections are written.
@@ -279,7 +289,7 @@ Present summary:
 prd.md + adr.md
   |        |
   v        |
-[1] /speckit.specify --> spec.md (uses prd.md)
+[1] /speckit.specify --> spec.md (uses prd.md; pins branch number via --number when spec number given)
   |        |
   v        |
 [3] spec-verifier --> fixes spec.md
