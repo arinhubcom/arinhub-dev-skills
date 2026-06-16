@@ -51,7 +51,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 
 | Skill                                                                                | Description                                                                                                                                           | Use when                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`ah-workflow`](skills/ah-workflow/SKILL.md)                                         | Orchestrate the full feature pipeline end-to-end from a feature description or a **GitHub issue URL** (auto-classifies feature vs update) -- sequentially launches subagents for PRD/ADR, tasks, implementation, QA, and finalization (PR), anchored by `/goal` with per-phase retry + escalation to avoid loops. | `"ah workflow"`, `"ah run workflow"`, `"ah full workflow"`, `"ah workflow <issue-url>"`                                                                                              |
+| [`ah-workflow`](skills/ah-workflow/SKILL.md)                                         | Orchestrate the full feature pipeline end-to-end from a feature description or a **GitHub issue URL** (auto-classifies feature vs update) -- sequentially launches subagents for PRD/ADR, tasks, implementation, and finalization (PR), anchored by `/goal` with per-phase retry + escalation to avoid loops. | `"ah workflow"`, `"ah run workflow"`, `"ah full workflow"`, `"ah workflow <issue-url>"`                                                                                              |
 | [`ah-review-code`](skills/ah-review-code/SKILL.md)                                   | Orchestrate a comprehensive code review by running multiple review strategies in parallel, merging and deduplicating findings into a review file.     | `"ah review code"`, `"ah review code 123"`                                                                                                                                          |
 | [`ah-submit-code-review`](skills/ah-submit-code-review/SKILL.md)                     | Submit code review from chat session or review file to a GitHub PR.                                                                                   | `"ah submit code review 123"`                                                                                                                                                       |
 | [`ah-verify-requirements-coverage`](skills/ah-verify-requirements-coverage/SKILL.md) | Verify that a PR or local changes fully implement the requirements described in a linked GitHub issue.                                                | `"ah verify requirements coverage"`, `"ah verify requirements coverage issue 42"`, `"ah verify requirements coverage PR 123"`, `"ah verify requirements coverage PR 123, issue 42"` |
@@ -91,11 +91,10 @@ fallback, echoing the decision and its evidence before launching. In update mode
 spec number (`Spec Number:` marker, else it asks) and a branch prefix. Explicit `base <branch>` /
 `mode feature|update` / `spec <NNN>` overrides win over what the issue implies.
 
-The orchestrator sets a `/goal` completion condition (with a turn cap as a runaway guard), runs a
-dev-server preflight, then sequentially launches one subagent per phase. Each phase is guarded by
+The orchestrator sets a `/goal` completion condition (with a turn cap as a runaway guard), then
+sequentially launches one subagent per phase. Each phase is guarded by
 retry + stuck-detection: after at most `max-retries` attempts (default 2) with no new commit or
-artifact change, it records the failure and escalates to you instead of looping. QA is a soft gate --
-it skips when no dev server is running and pauses for your decision on Critical findings.
+artifact change, it records the failure and escalates to you instead of looping.
 
 Optional directives: `mode feature|update` (default `feature`; `update` forwards to `ah-create-tasks`'s
 update mode and needs a `spec number` + `branch prefix`), `dry-run` (plan only, launch nothing),
@@ -108,12 +107,9 @@ update mode and needs a `spec number` + `branch prefix`), `dry-run` (plan only, 
 | 1 | [`ah-create-prd-adr`](skills/ah-create-prd-adr/SKILL.md)                   | PRD + ADR from the feature description                    |
 | 2 | [`ah-create-tasks`](skills/ah-create-tasks/SKILL.md)                       | Feature branch + `specs/<branch>/` (spec, plan, tasks)    |
 | 3 | [`ah-implement-tasks`](skills/ah-implement-tasks/SKILL.md)                 | Implemented code with TDD, committed                      |
-| 4 | [`ah-check-qa`](skills/ah-check-qa/SKILL.md)                               | UI/UX QA report (soft gate; skipped if no dev server)     |
-| 5 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                     | Simplify, tests, docs, review, then the PR via `ah-create-pr` |
-| 6 | [`revise-claude-md`](https://github.com/anthropics/claude-code)            | CLAUDE.md updated with learnings from the session         |
+| 4 | [`ah-finalize-code`](skills/ah-finalize-code/SKILL.md)                     | Simplify, tests, docs, review, then the PR via `ah-create-pr` |
 
-`ah-create-pr` is not a separate phase -- `ah-finalize-code` calls it at the end of phase 5. Phase 6
-uses the `claude-md-management:revise-claude-md` skill to capture learnings from the run.
+`ah-create-pr` is not a separate phase -- `ah-finalize-code` calls it at the end of phase 4.
 
 ### How to Use `ah-review-code`
 

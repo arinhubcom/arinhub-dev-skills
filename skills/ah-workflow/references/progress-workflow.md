@@ -6,7 +6,6 @@
 - **Feature Branch**: pending (created in Phase 2)
 - **Feature description**: <FEATURE_DESCRIPTION>
 - **Max retries / phase**: <MAX_RETRIES>
-- **Dev server**: <DEV_SERVER_STATUS>
 - **Started at**: <TIMESTAMP>
 - **Completed at**: pending
 - **Total duration**: pending
@@ -38,25 +37,7 @@
 - artifacts: (commits, tasks.md completion)
 - findings:
 
-## Phase 4 - ah-check-qa [ ]
-
-- status: not started
-- attempts: 0
-- started:
-- ended:
-- artifacts: (QA report path)
-- findings: (severity summary; skipped if no dev server)
-
-## Phase 5 - revise-claude-md [ ]
-
-- status: not started
-- attempts: 0
-- started:
-- ended:
-- artifacts: (CLAUDE.md changes; committed onto the feature branch)
-- findings:
-
-## Phase 6 - ah-finalize-code [ ]
+## Phase 4 - ah-finalize-code [ ]
 
 - status: not started
 - attempts: 0
@@ -67,7 +48,7 @@
 
 ## Summary
 
-- phases complete: 0/6
+- phases complete: 0/4
 - skipped phases:
 - escalations:
 - status: not started
