@@ -173,17 +173,37 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
    - Phase 4 (`ah-finalize-code`): include `autonomous` -- it runs the retrospective non-interactively
      and forwards `autonomous` to `ah-create-pr`, so PR creation fails fast (rather than pausing) on a
      broken build or missing input. The skill reads `spec.md`; name the spec dir if helpful.
-3. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
+3. **Verify real artifacts first.** The subagent's reported status (a one-line summary, a
+   `Stream idle timeout`, an error, a partial/0-token result) is **advisory only** and frequently
+   wrong -- it reflects transport state, not committed work. Before doing anything with it, check the
+   filesystem and git for the phase's expected artifacts. If the artifacts exist, the phase
+   **succeeded** regardless of what the status said: log `done`, capture the paths, and continue. Only
+   when the artifacts are genuinely absent do you treat the phase as failed and enter the retry path.
+   **Never retry or fail a phase on a reported timeout/error alone.** Per-phase checks:
+   - **Phase 1 (`ah-create-prd-adr`)**: both `~/.agents/prds/prd-<repo>-<feat>.md` and
+     `~/.agents/adrs/adr-<repo>-<feat>.md` exist and are non-empty.
+   - **Phase 2 (`ah-create-tasks`)**: `git branch --show-current` is a new feature branch (not the
+     base), `specs/<branch>/` exists with `spec.md`, `plan.md`, and `tasks.md`, and
+     `git log <base>..HEAD --oneline` shows the expected spec commits.
+   - **Phase 3 (`ah-implement-tasks`)**: `git log` shows new implementation commits beyond phase 2,
+     and `tasks.md` checkboxes advanced (compare checked count vs. the post-phase-2 state).
+   - **Phase 4 (`ah-finalize-code`)**: an open PR exists for the branch (`gh pr view --json url` /
+     `ah-create-pr`'s reported URL) and `retrospective.md` exists in the spec dir.
+4. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
    attempt count in the `extra` field:
    `progress_log "${PROGRESS_FILE}" <k> <phase-name> <status> <attempts> "<artifact paths>"`
    (status: `done`, `skipped(user)`, `failed`). Phase 1 -> PRD + ADR paths; phase 2 -> feature branch
    (`git branch --show-current`) + spec dir; phase 3 -> commits / tasks.md completion; phase 4 -> PR URL.
    After the final phase, `progress_done "${PROGRESS_FILE}" completed`.
-4. **Echo** the log into the conversation with `progress_render "${PROGRESS_FILE}"` (for the `/goal`
+5. **Echo** the log into the conversation with `progress_render "${PROGRESS_FILE}"` (for the `/goal`
    evaluator, which only sees the conversation).
-5. **Verify progress** and decide retry vs. escalate (next section).
+6. **Verify progress** and decide retry vs. escalate (next section).
 
 ### Anti-loop / stuck detection
+
+You only reach this section when the artifact check above (step 3) found the phase's expected
+artifacts **missing**. A reported timeout/error with artifacts present is a success, not a failure --
+do not count it as a retry attempt.
 
 A phase that fails the same way over and over must not loop forever -- that's the whole point of the
 guard. For each phase, allow at most `max-retries` (default 2) attempts. Between attempts, check whether
