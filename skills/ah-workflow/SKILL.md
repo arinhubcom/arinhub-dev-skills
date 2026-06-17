@@ -1,7 +1,7 @@
 ---
 name: ah-workflow
-description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", "ah full workflow", or given a GitHub issue URL to take from issue to PR (e.g. "ah workflow https://github.com/org/repo/issues/42"). Takes either a feature description + an issue number + a base branch, OR a GitHub issue URL (it then resolves those inputs from the issue via references/resolve-gh-issue.md, auto-classifying the issue as a new feature or an update). Sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-finalize-code (which creates the PR). Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature or a GitHub issue from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
-argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode create|update [default create], spec number [required when mode=update, optional in create mode to pin the branch number], branch prefix, dry-run, skip <phase>, max-retries N, resume, autonomous [on by default])"
+description: Run the full ArinHub feature-development pipeline end-to-end with the "ah" prefix. Use for "ah workflow", "ah run workflow", "ah full workflow", a GitHub issue URL to take from issue to PR, or any request to run the whole ah pipeline at once. Takes a feature description + issue number + base branch, OR a GitHub issue URL (resolved via references/resolve-gh-issue.md). Sequentially launches subagents: ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> optional ah-check-qa verification -> ah-finalize-code (creates the PR), anchored with /goal and guarded by retry + escalation.
+argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode create|update [default create], spec number [required when mode=update, optional in create mode to pin the branch number], branch prefix, dry-run, skip <phase>, max-retries N, resume, autonomous [on by default], an ad-hoc browser/QA verification instruction e.g. \"verification with the agent-browser skill\" [adds an optional verify phase before finalize])"
 ---
 
 # AH Workflow
@@ -37,9 +37,16 @@ completion goal without spinning forever on a phase that can't progress.
 | 1 | `ah-create-prd-adr` | feature description | `~/.agents/prds/prd-<repo>-<feat>.md`, `~/.agents/adrs/adr-<repo>-<feat>.md` |
 | 2 | `ah-create-tasks` | PRD path, ADR path, issue number (base branch via checkout -- see note) | new git branch + `specs/<branch>/` (spec.md carries Base Branch + Issue Number metadata, plan.md, tasks.md) |
 | 3 | `ah-implement-tasks` | reads `specs/<branch>` and spec.md metadata | implemented code, commits, tasks.md checked off |
+| 3.5 (optional) | `ah-check-qa` | the `VERIFY_TASK`-derived `checks` scope; phase starts/stops the dev server itself | browser QA report; any fixes committed |
 | 4 | `ah-finalize-code` | reads spec.md metadata | simplify + tests + docs + review, then creates/updates the PR via `ah-create-pr` |
 
 `ah-create-pr` is **not** a separate phase -- `ah-finalize-code` calls it at the end of phase 4.
+
+**Phase 3.5 (verify) is optional** -- it runs only when the prompt carries an ad-hoc browser/QA
+verification instruction (`VERIFY_TASK`, see step 0). When absent, the pipeline is the unchanged
+four-phase sequence. It is placed **before** finalize so the PR already contains any fixes, and it
+deliberately does **not** run `/simplify` or `pnpm preflight` -- `ah-finalize-code` runs both in its
+first step immediately after.
 
 Key input propagation: phases 1 and 2 are where data flows between skills. Phase 1 produces the
 PRD and ADR paths; you pass them into phase 2. **Important about the base branch:** `ah-create-tasks`
@@ -89,6 +96,21 @@ Parse optional directives:
 - `skip <phase>` -- skip a named phase (e.g. `skip finalize`). Log it `skipped(user)`.
 - `max-retries N` -- per-phase attempt cap (default 2).
 - `resume` / `restart` -- how to handle an existing progress file.
+- `VERIFY_TASK` (ad-hoc browser/QA verification) -- **fuzzy-detect** verification phrasing in the
+  prompt ("verification with the agent-browser skill", "verify with agent-browser", "run QA /
+  check QA", or any free-text request to validate the running app in a browser) and capture it
+  verbatim into `VERIFY_TASK`. When set, it enables the optional verify phase 3.5 (see the per-phase
+  pattern). **False-positive guard:** the feature description is itself free text and may contain
+  words like "verify"/"QA" (e.g. "add a verification email flow"). Only treat text as a `VERIFY_TASK`
+  when it reads as an instruction to the workflow about browser/QA verification -- i.e. it references
+  the browser/agent-browser/QA explicitly, or is a directive clause distinct from the feature
+  description. A bare "verify" inside the feature sentence does **not** enable the phase. When
+  ambiguous in a non-autonomous invocation, ask; in autonomous mode, default to **not** enabling it
+  (fail safe -- finalize still runs its own checks). When set, derive the `ah-check-qa` `checks`
+  scope from the wording (fallback `smoke`): "visual/layout/responsive/screenshots" -> `visual`;
+  "perf/vitals/lighthouse" -> `perf`; "a11y/accessibility" -> `a11y`; "e2e/flow/smoke" or generic
+  "verify" -> `smoke`; "everything/full" -> `full`. Plain "verification with the agent-browser
+  skill" -> `smoke`.
 - `autonomous` -- run every phase non-interactively. **On by default in this workflow** and
   always passed to every phase subagent: the pipeline runs phases as subagents with no channel
   to the user, so each `ah-*` skill must decide from context (recording assumptions) or fail
@@ -132,10 +154,11 @@ Set a session goal so Claude keeps working across turns toward completion, with 
 outermost runaway guard:
 
 ```
-/goal the ah-workflow progress file for issue <N> shows all four phases complete (PRD+ADR, tasks, implement, finalize+PR), or stop after <T> turns
+/goal the ah-workflow progress file for issue <N> shows all phases complete (PRD+ADR, tasks, implement, verify [only if requested], finalize+PR), or stop after <T> turns
 ```
 
-Pick `T` as roughly `(remaining phases) x (max-retries) + 4` for headroom. Why this works: the `/goal`
+Pick `T` as roughly `(remaining phases) x (max-retries) + 4` for headroom -- count the optional
+verify phase among the remaining phases when `VERIFY_TASK` is set. Why this works: the `/goal`
 evaluator only sees what's in the conversation and never runs tools, so after every phase you must echo
 `progress_render "${PROGRESS_FILE}"` into the conversation -- that's what lets the evaluator judge
 "complete". The `or stop after <T> turns` clause is the tripwire that stops the session even if the
@@ -143,7 +166,8 @@ per-phase guards below somehow fail.
 
 ### Per-phase orchestration pattern
 
-Apply the same loop to each of the four phases, in order. For phase _k_:
+Apply the same loop to each configured phase, in order (the four core phases, plus the optional
+verify phase 3.5 between implement and finalize when `VERIFY_TASK` is set). For phase _k_:
 
 1. **Skip checks**: if the user asked to skip it, or it's already complete on resume, mark it and move
    on.
@@ -170,6 +194,22 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
      feature branch number (`jj/<spec>-<desc>`) instead of auto-detecting it.
    - Phase 3 (`ah-implement-tasks`): include `autonomous` -- the skill reads `spec.md`; just name the
      spec dir if helpful.
+   - Phase 3.5 (`ah-check-qa`, **optional -- only when `VERIFY_TASK` is set**): a bounded
+     verify-and-fix subagent (include `autonomous`):
+     1. **Start the dev server in the background.** No prior phase leaves one running, and
+        `ah-check-qa` stops if it finds none. Detect the dev command (e.g. `package.json` `dev`
+        script: `pnpm dev` / `npm run dev` / framework default), launch it in the background, and
+        wait until a port responds (the common ports `ah-check-qa` polls: 3000/3001/5173/5174/4321/
+        8080/8888/6006). **Tear it down at phase end** (kill the background process), even on failure.
+        If no dev command exists, log this phase `skipped(none)` rather than hard-failing.
+     2. **Verify**: invoke `ah-check-qa` with `checks <scope>` (the scope derived from `VERIFY_TASK`,
+        default `smoke`) against the running server.
+     3. **Fix errors**: if QA surfaces failures, fix them in the working tree (commit as the other
+        phases do via the skill's internal `committer`), then re-run `ah-check-qa` to confirm. Cap
+        this internal fix->verify loop at ~2 fix rounds so the subagent can't spin. The phase is
+        `done` once QA passes; if failures persist, fall through to the anti-loop / escalate path
+        below -- do not silently continue to finalize. **Do not run `/simplify` or `pnpm preflight`
+        here** -- phase 4 (`ah-finalize-code`) runs both next.
    - Phase 4 (`ah-finalize-code`): include `autonomous` -- it runs the retrospective non-interactively
      and forwards `autonomous` to `ah-create-pr`, so PR creation fails fast (rather than pausing) on a
      broken build or missing input. The skill reads `spec.md`; name the spec dir if helpful.
@@ -187,13 +227,18 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
      `git log <base>..HEAD --oneline` shows the expected spec commits.
    - **Phase 3 (`ah-implement-tasks`)**: `git log` shows new implementation commits beyond phase 2,
      and `tasks.md` checkboxes advanced (compare checked count vs. the post-phase-2 state).
+   - **Phase 3.5 (`ah-check-qa`, only when `VERIFY_TASK` is set)**: a QA report exists under
+     `~/.agents/arinhub/qa-reports/`; if QA surfaced failures, the fix commits exist in `git log`.
+     When the phase logged `skipped(none)` (no dev command), that is a valid terminal state, not a
+     failure.
    - **Phase 4 (`ah-finalize-code`)**: an open PR exists for the branch (`gh pr view --json url` /
      `ah-create-pr`'s reported URL) and `retrospective.md` exists in the spec dir.
 4. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
    attempt count in the `extra` field:
    `progress_log "${PROGRESS_FILE}" <k> <phase-name> <status> <attempts> "<artifact paths>"`
-   (status: `done`, `skipped(user)`, `failed`). Phase 1 -> PRD + ADR paths; phase 2 -> feature branch
-   (`git branch --show-current`) + spec dir; phase 3 -> commits / tasks.md completion; phase 4 -> PR URL.
+   (status: `done`, `skipped(user)`, `skipped(none)`, `failed`). Phase 1 -> PRD + ADR paths; phase 2 ->
+   feature branch (`git branch --show-current`) + spec dir; phase 3 -> commits / tasks.md completion;
+   phase 3.5 (verify, when run) -> QA report path + any fix commits; phase 4 -> PR URL.
    After the final phase, `progress_done "${PROGRESS_FILE}" completed`.
 5. **Echo** the log into the conversation with `progress_render "${PROGRESS_FILE}"` (for the `/goal`
    evaluator, which only sees the conversation).
@@ -234,7 +279,8 @@ If `dry-run` was passed, do not launch any subagent. Instead print:
   prefix in update mode, and the spec number too if one was supplied in create mode --
   plus the derived feature slug -- 2-5 words, lowercase,
   hyphen-separated, matching `ah-create-prd-adr`'s convention),
-- the four phases in order with the input each will receive,
+- the phases in order with the input each will receive -- include the optional verify phase 3.5
+  (with its derived `checks` scope) when a `VERIFY_TASK` was detected, and state when it is absent,
 - the target artifact paths (PRD, ADR, spec dir, progress file).
 
 This is a cheap way to confirm the plan before committing to a full run.
@@ -247,7 +293,9 @@ unfinished one. Completed phases (and their commits, done inside the phase skill
 ### Report
 
 When the pipeline finishes (or stops at an escalation), print a final summary: the status of each
-phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4.
+phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4. When the verify phase 3.5 ran,
+include its QA report path and a one-line result (checks scope, issues found, and whether fixes were
+committed).
 
 Because every phase ran autonomously (deciding without the user), surface the autonomous decisions
 for review. The spec dir is the phase-2 artifact captured in the progress log (or `specs/<branch>/`

@@ -1,7 +1,7 @@
 ---
 name: ah-check-qa
-description: "Use this skill to run UI and UX quality assurance checks when using the 'ah' prefix. Use when asked to 'ah check qa'. Also use when the user wants to verify visual correctness, check responsive layout, audit interactive elements, run E2E smoke tests, detect console or network errors, compare before/after screenshots during refactoring, or verify that a page works correctly across viewports. Uses agent-browser CLI for visual inspection, snapshots, Core Web Vitals audits, interaction testing, and E2E flows. Works with any localhost dev server, Storybook, or live URL."
-argument-hint: "URL (optional, auto-detected from running dev server), route or page name to focus on, or 'before' to capture baseline screenshots"
+description: "Run UI/UX quality assurance checks with the 'ah' prefix. Use for 'ah check qa', or to verify visual correctness, responsive layout, interactive elements, E2E smoke flows, console/network errors, or before/after screenshots. Modular via a `checks` switch (presets smoke|visual|perf|a11y|full or a group list; defaults to a fast `smoke` check). Uses the agent-browser CLI against any localhost dev server, Storybook, or live URL."
+argument-hint: "URL (optional, auto-detected from running dev server), route or page name to focus on, 'before' to capture baseline screenshots, or 'checks <preset|group-list>' to scope which checks run (default smoke)"
 ---
 
 # Check Quality Assurance
@@ -23,6 +23,43 @@ no manual editing, they scan full page.
   Without `before` when baselines already exist, auto-enters comparison mode.
 - **Focus** (optional): Route path, page name, or component to focus on instead of
   all discovered routes.
+- **Checks** (optional): `checks <preset|group-list>` scopes which checks run. Accepts a
+  preset name (see Check Scope below) or a comma-separated group list (e.g.
+  `checks visual,console`). Unknown tokens -> warn and fall back to `smoke`. **Default
+  when omitted: `smoke`** (fast structural + console/network + E2E check). Run the full
+  battery with `checks full`. Composes with `before`/baseline and `focus`.
+
+## Check Scope
+
+The procedure's checks are grouped so a run can target just what matters. Steps 0
+(detect env), 1 (route discovery), 2 (browser), 3 (overlays), and 11 (report) always run;
+baseline `before` mode (step 4) is unchanged. Steps 5-10 run only when their group is in
+the selected scope.
+
+| group | covers |
+|---|---|
+| `structure` | 5a a11y / structural snapshot review |
+| `visual` | 5b multi-viewport screenshots + 5e visual-audit script |
+| `vitals` | 5c Core Web Vitals |
+| `trace` | 5d + 7 performance trace start / stop / analyze |
+| `console` | 5f console + network errors |
+| `dark` | 5g dark-mode testing (only if `HAS_DARK_MODE`) |
+| `interaction` | 6 interactive audit, spot-checks, form behavior |
+| `e2e` | 8 navigation / key-flow / state-persistence smoke |
+| `resilience` | 9 resilience / break testing |
+| `compare` | 10 before/after comparison (only if baseline exists) |
+
+Presets compose groups:
+
+| preset | groups |
+|---|---|
+| `smoke` (**default**) | `structure`, `console`, `e2e` |
+| `visual` | `structure`, `visual`, `dark`, `compare` |
+| `perf` | `vitals`, `trace` |
+| `a11y` | `structure`, `interaction` |
+| `full` | every group (the legacy behavior) |
+
+Resolve the selection to a concrete `SELECTED_GROUPS` set once, up front, before step 5.
 
 ## Procedure
 
@@ -162,9 +199,11 @@ If this mode active, exit after capturing baselines -- skip steps 5-11.
 
 ### 5. UI Visual QA
 
-For each discovered route (respecting priority order from Step 1):
+For each discovered route (respecting priority order from Step 1). Each sub-step below runs
+only if its group (see Check Scope) is in `SELECTED_GROUPS`; skip the rest and note them
+`skipped (not in checks scope)` in the report.
 
-#### 5a. Navigate and Snapshot
+#### 5a. Navigate and Snapshot _(group: `structure`)_
 
 ```bash
 agent-browser open "${ROUTE_URL}"
@@ -177,7 +216,7 @@ Review a11y snapshot for structural issues:
 - Empty landmark regions
 - Duplicate IDs
 
-#### 5b. Multi-Viewport Screenshots
+#### 5b. Multi-Viewport Screenshots _(group: `visual`)_
 
 Capture at three breakpoints, check layout issues at each:
 
@@ -202,7 +241,7 @@ At each viewport, review snapshot for responsive issues:
 - Touch targets too small on mobile (< 44x44px)
 - Content hidden unintentionally
 
-#### 5c. Core Web Vitals Audit
+#### 5c. Core Web Vitals Audit _(group: `vitals`)_
 
 agent-browser has no Lighthouse. Capture Core Web Vitals instead:
 
@@ -216,7 +255,7 @@ Note: Lighthouse-specific category scores (Accessibility, Best Practices, SEO)
 are not available via agent-browser -- rely on the snapshot and audit scripts for
 accessibility/structure findings.
 
-#### 5d. Start Performance Trace
+#### 5d. Start Performance Trace _(group: `trace`)_
 
 Start trace after screenshots and the vitals audit are done -- those involve viewport
 resizes and page manipulation that would pollute the trace. From here, trace
@@ -226,7 +265,7 @@ captures script injections, clicks, hovers, form fills through Steps 5e-5f and 6
 agent-browser trace start
 ```
 
-#### 5e. Visual Audit Script
+#### 5e. Visual Audit Script _(group: `visual`)_
 
 Read `scripts/visual-audit.js` and inject it:
 
@@ -239,7 +278,7 @@ outside viewport, empty visible containers). `summary` has true counts (`total`,
 `byType`, `bySeverity`, `truncated`); `issues` capped at 50, sorted severity-first.
 Use `summary` for tallies, `issues` for specifics -- record all findings.
 
-#### 5f. Console and Network Errors
+#### 5f. Console and Network Errors _(group: `console`)_
 
 ```bash
 agent-browser console
@@ -254,7 +293,7 @@ From network requests, identify:
 - Missing resources (404s)
 - Slow requests (> 3s response time)
 
-#### 5g. Dark Mode Testing (if detected)
+#### 5g. Dark Mode Testing (if detected) _(group: `dark`)_
 
 If `HAS_DARK_MODE=true` (detected in Step 0), test current route in dark mode after
 light-mode checks above. Catches color contrast failures, invisible text on dark
@@ -293,7 +332,10 @@ agent-browser eval "document.documentElement.classList.remove('dark')"
 Skip dark mode testing if app has no dark mode support -- false positives from
 forcing dark scheme on a light-only app are not useful.
 
-### 6. UX Interaction QA
+### 6. UX Interaction QA _(group: `interaction`)_
+
+Run only if `interaction` is in `SELECTED_GROUPS`; otherwise skip and note it
+`skipped (not in checks scope)` in the report.
 
 #### 6a. Interactive Elements Audit
 
@@ -341,7 +383,10 @@ agent-browser snapshot -i
 # Verify validation messages appear
 ```
 
-### 7. Stop and Analyze Performance Trace
+### 7. Stop and Analyze Performance Trace _(group: `trace`)_
+
+Run only if `trace` is in `SELECTED_GROUPS` (it pairs with Step 5d -- if 5d was skipped,
+skip this too). Otherwise note it `skipped (not in checks scope)` in the report.
 
 Trace running since Step 5d, capturing visual audit script injection, console/network
 checks, clicks, hovers, form fills -- the real interaction exercise without
@@ -364,7 +409,10 @@ Record findings with severity:
 - Long tasks 50-200ms or layout thrashing: warning
 - Minor paint issues: info
 
-### 8. E2E Smoke Test
+### 8. E2E Smoke Test _(group: `e2e`)_
+
+Run only if `e2e` is in `SELECTED_GROUPS`; otherwise skip and note it
+`skipped (not in checks scope)` in the report.
 
 Multi-step flow testing to verify pages work end-to-end.
 
@@ -425,12 +473,18 @@ agent-browser snapshot -i
 # Compare: did the state persist (URL params, visible selections)?
 ```
 
-### 9. Resilience / Break Testing
+### 9. Resilience / Break Testing _(group: `resilience`)_
+
+Run only if `resilience` is in `SELECTED_GROUPS` (excluded from the default `smoke`
+preset); otherwise skip and note it `skipped (not in checks scope)` in the report.
 
 Follow procedure in [resilience-testing.md](references/resilience-testing.md).
 Sub-steps labeled 9a through 9g in report and procedure.
 
-### 10. Before/After Comparison
+### 10. Before/After Comparison _(group: `compare`)_
+
+Run only if `compare` is in `SELECTED_GROUPS` and baseline screenshots exist; otherwise
+skip and note it `skipped (not in checks scope)` in the report.
 
 Check if baseline screenshots exist:
 
@@ -463,6 +517,8 @@ REPORT_FILE=${QA_DIR}/qa-report-${REPO_NAME}-$(date +%Y%m%d-%H%M%S).md
 
 Write report following template, then present report path and summary to user:
 
+- Check scope: the resolved preset/groups that ran, and which groups were skipped
+  (`not in checks scope`) -- so a narrowed run is never mistaken for full coverage
 - Total issues by severity (critical, warning, info)
 - Core Web Vitals (LCP, CLS, INP, FCP, TTFB)
 - E2E pass/fail count
