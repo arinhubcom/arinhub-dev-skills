@@ -1,6 +1,6 @@
 ---
 name: ah-fix-ui-bug
-description: "Use this skill to debug and fix UI bugs in web apps when using the 'ah' prefix. Use when asked to 'ah fix ui bug'. Also use when elements are at wrong positions, animations land at wrong spots, layout shifts occur, elements overflow containers, buttons/chips/overlays are mispositioned, z-index layering is wrong, flex/grid alignment is off, text is truncated or overflowing, hover states get stuck, scroll jumps occur, or persistent visual regressions appear. Uses agent-browser CLI to navigate pages, inspect elements, inject diagnostic scripts, take screenshots, and analyze DOM mutations. Works with Storybook, localhost dev servers, or any browser page. For single-frame flash/flicker timing races, prefer ah-fix-dom-flash instead."
+description: "Debug and fix UI bugs in web apps with the 'ah' prefix. Use for 'ah fix ui bug', or for wrong element/animation positions, layout shifts, overflow, mispositioned buttons/chips/overlays, wrong z-index layering, off flex/grid alignment, truncated/overflowing text, stuck hover states, scroll jumps, or visual regressions. Uses the agent-browser CLI to navigate, inspect elements, inject diagnostics, screenshot, and analyze DOM mutations. Works with Storybook, localhost, or any page. For single-frame flash/flicker races, prefer ah-fix-dom-flash."
 argument-hint: "URL or page description, element selector or interaction that triggers the bug"
 ---
 

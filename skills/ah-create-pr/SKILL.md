@@ -1,6 +1,6 @@
 ---
 name: ah-create-pr
-description: Use this skill to create or update a GitHub Pull Request when using the "ah" prefix. Use when asked to "ah create pr", "ah create pull request", or "ah pr". Analyzes the current branch, runs quality checks, generates a well-structured PR with summary, changes, tests, and linked issues. If an open PR already exists for the branch, updates it via `gh pr edit`; otherwise creates a new one via `gh pr create`.
+description: Create or update a GitHub Pull Request with the "ah" prefix. Use for "ah create pr", "ah create pull request", or "ah pr". Analyzes the current branch, runs quality checks, and generates a PR with summary, changes, tests, and linked issues. Updates an existing open PR via `gh pr edit`, otherwise creates one via `gh pr create`.
 argument-hint: "base branch, issue number, labels"
 ---
 

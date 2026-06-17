@@ -1,6 +1,6 @@
 ---
 name: ah-create-tasks
-description: Use this skill to create tasks from a PRD and ADR using the "ah" prefix. Use when asked to "ah create tasks". Runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, and task generation -- with consistency analysis passes, committing after each major step. Also supports "update" mode (e.g., "ah create tasks update 001") which skips initial specify/verify steps, creates a new branch, and starts from clarify.
+description: Create tasks from a PRD and ADR with the "ah" prefix. Use for "ah create tasks". Runs the full Spec Kit pipeline -- specify, clarify, plan, research, complexity check, checklist, task generation -- with consistency passes, committing after each step. Also supports "update" mode (e.g. "ah create tasks update 001"), which skips specify/verify, creates a new branch, and starts from clarify.
 argument-hint: "a feature name (derives default prd/adr paths) or explicit prd.md and adr.md paths, optionally 'update <spec-number>' for update mode, or a bare <spec-number> in create mode to pin the branch number"
 ---
 

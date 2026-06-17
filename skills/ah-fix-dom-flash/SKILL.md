@@ -1,6 +1,6 @@
 ---
 name: ah-fix-dom-flash
-description: "Use this skill to detect and debug DOM flash/flicker bugs using agent-browser CLI when using the 'ah' prefix. Use when asked to 'ah fix dom flash'. Also use when elements briefly appear in wrong positions, visual artifacts flash on screen after interactions (drag-drop, transitions, animations), timing races between framework DOM cleanup and React/Vue re-renders cause ghost elements, opacity/transform jump flashes on mount/unmount, portal content outliving its positioning context, or any single-frame visual glitch after a state change."
+description: "Detect and debug DOM flash/flicker bugs via the agent-browser CLI with the 'ah' prefix. Use for 'ah fix dom flash', or when elements briefly appear in wrong positions, visual artifacts flash after interactions (drag-drop, transitions, animations), framework DOM cleanup races with React/Vue re-renders to leave ghost elements, opacity/transform jumps on mount/unmount, portal content outlives its positioning context, or any single-frame glitch after a state change."
 argument-hint: "URL or page description, suspected element selector or interaction type"
 ---
 

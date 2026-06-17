@@ -1,6 +1,6 @@
 ---
 name: ah-create-prd-adr
-description: Use this skill to create a PRD and ADR from a feature description using the "ah" prefix. Use when asked to "ah create prd adr", "ah create prd and adr", or "ah prd adr". Takes a feature description (in any language), runs a short discovery interview, then generates a Product Requirements Document at ~/.agents/prds/prd-<repo>-<feature>.md and an Architectural Decision Record at ~/.agents/adrs/adr-<repo>-<feature>.md, with the ADR using the PRD as context. The output pair feeds directly into "ah create tasks".
+description: Create a PRD and ADR from a feature description with the "ah" prefix. Use for "ah create prd adr", "ah create prd and adr", or "ah prd adr". Takes a feature description (any language), runs a short discovery interview, then generates a PRD at ~/.agents/prds/prd-<repo>-<feature>.md and an ADR at ~/.agents/adrs/adr-<repo>-<feature>.md (ADR uses the PRD as context). Output feeds directly into "ah create tasks".
 argument-hint: "a feature description, optionally a feature-name slug"
 ---
 

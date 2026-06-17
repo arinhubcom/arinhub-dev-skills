@@ -1,6 +1,6 @@
 ---
 name: ah-finalize-code
-description: Use this skill to finalize code changes before creating a PR when using the "ah" prefix. Use when asked to "ah finalize code", "ah finalize changes", or "ah finalize". Runs a multi-step workflow that simplifies code, creates a retrospective, adds tests, updates JSDoc references, updates documentation, optimizes and syncs specs, performs a code review, and creates a pull request -- committing after each step. Steps with no relevant changes are auto-skipped to save time. Supports resuming interrupted runs and skipping steps by name (e.g., "ah finalize code skip docs").
+description: Finalize code changes before a PR with the "ah" prefix. Use for "ah finalize code", "ah finalize changes", or "ah finalize". Runs a multi-step workflow: simplify code, write a retrospective, add tests, update JSDoc and docs, optimize/sync specs, code review, and create the PR -- committing after each step. Steps with no relevant changes are auto-skipped. Supports resuming runs and skipping steps by name (e.g. "ah finalize code skip docs").
 argument-hint: "optional: 'skip docs', 'skip tests', 'skip specs' to skip specific steps; 'autonomous' to run non-interactively"
 ---
 

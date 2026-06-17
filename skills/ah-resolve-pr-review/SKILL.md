@@ -1,6 +1,6 @@
 ---
 name: ah-resolve-pr-review
-description: Use this skill to resolve unresolved PR conversations when using the "ah" prefix. Use when asked to "ah resolve pr review". Also use when the user mentions resolving, addressing, or fixing PR review feedback or unresolved threads.
+description: Resolve unresolved PR conversations with the "ah" prefix. Use for "ah resolve pr review", or when resolving, addressing, or fixing PR review feedback or unresolved threads.
 argument-hint: "PR number or URL (e.g., 47, #47, https://github.com/owner/repo/pull/47), or omit to auto-detect from current branch"
 ---
 
