@@ -1,7 +1,7 @@
 ---
 name: ah-workflow
 description: Use this skill to run the full ArinHub feature-development pipeline end-to-end using the "ah" prefix. Use when asked to "ah workflow", "ah run workflow", "ah full workflow", or given a GitHub issue URL to take from issue to PR (e.g. "ah workflow https://github.com/org/repo/issues/42"). Takes either a feature description + an issue number + a base branch, OR a GitHub issue URL (it then resolves those inputs from the issue via references/resolve-gh-issue.md, auto-classifying the issue as a new feature or an update). Sequentially launches subagents for ah-create-prd-adr -> ah-create-tasks -> ah-implement-tasks -> ah-finalize-code (which creates the PR). Anchors the run with the /goal command and guards every phase with retry + escalation so it never loops forever. Use this skill whenever the user wants to take a feature or a GitHub issue from idea to PR in one orchestrated run, or mentions running the whole ah pipeline / all the ah steps at once.
-argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode create|update [default create], spec number [required when mode=update, optional in create mode to pin the branch number], branch prefix, dry-run, skip <phase>, max-retries N, resume)"
+argument-hint: "a feature description + an issue number + a base branch, OR a GitHub issue URL (optional: mode create|update [default create], spec number [required when mode=update, optional in create mode to pin the branch number], branch prefix, dry-run, skip <phase>, max-retries N, resume, autonomous [on by default])"
 ---
 
 # AH Workflow
@@ -89,6 +89,11 @@ Parse optional directives:
 - `skip <phase>` -- skip a named phase (e.g. `skip finalize`). Log it `skipped(user)`.
 - `max-retries N` -- per-phase attempt cap (default 2).
 - `resume` / `restart` -- how to handle an existing progress file.
+- `autonomous` -- run every phase non-interactively. **On by default in this workflow** and
+  always passed to every phase subagent: the pipeline runs phases as subagents with no channel
+  to the user, so each `ah-*` skill must decide from context (recording assumptions) or fail
+  fast instead of pausing -- otherwise the run deadlocks. There is no reason to turn it off
+  inside a workflow run; the workflow's own escalation guard handles genuine blockers.
 
 ```bash
 REPO_NAME=$(basename -s .git "$(git remote get-url origin)" 2>/dev/null || basename "$(git rev-parse --show-toplevel)")
@@ -145,20 +150,29 @@ Apply the same loop to each of the four phases, in order. For phase _k_:
 2. **Launch a subagent** (Opus, low) whose prompt is: "Invoke the skill `<ah-skill-for-phase-k>`
    with these inputs: <inputs>. When done, report the exact artifact paths you produced and a one-line
    status." Pass the phase-specific inputs:
-   - Phase 1: the feature description. The skill derives the feature slug itself (its convention:
+   Every phase below must also include `autonomous` in its inputs (see the `autonomous` directive)
+   so the subagent never pauses for the unreachable user.
+   - Phase 1: the feature description, plus `autonomous`. The skill derives the feature slug itself (its convention:
      2-5 words, lowercase, hyphen-separated, no special chars -- e.g. "add a dark mode toggle to
      settings" -> `dark-mode-toggle`), and that slug determines the PRD/ADR filenames.
    - Phase 2: **first `git checkout <base-branch>`** (and `git pull` if it tracks a remote) so the new
      feature branch is cut from the right base -- `ah-create-tasks` reads the base from the current
      branch, it has no base-branch argument. Then pass the PRD path and ADR path captured from phase
-     1's report, plus the issue number. (Passing the derived feature slug also works in place of the
-     two paths, per `ah-create-tasks`'s feature-name input.) **In `update` mode**, additionally tell
+     1's report, plus the issue number. **Always include `autonomous` in the inputs** -- this
+     workflow runs `ah-create-tasks` as a subagent with no channel to the user, so its Step 5
+     (clarify) and Step 11 (complexity check) must decide from context and record ASSUMPTIONs
+     instead of pausing; without it the run deadlocks. (Passing the derived feature slug also works
+     in place of the two paths, per `ah-create-tasks`'s feature-name input.) **In `update` mode**, additionally tell
      the subagent to run `ah-create-tasks` in update mode -- i.e. include `update <spec-number>` and
      the `branch prefix` (exported as `GIT_BRANCH_PREFIX`) in the inputs -- so it skips re-specify and
      branches as `<prefix>/<spec>-<desc>`. In `create` mode, pass nothing extra (the default)
      unless a `spec number` was resolved -- then pass it too, so `ah-create-tasks` pins the
      feature branch number (`jj/<spec>-<desc>`) instead of auto-detecting it.
-   - Phases 3, 4: nothing extra -- the skill reads `spec.md`. Just name the spec dir if helpful.
+   - Phase 3 (`ah-implement-tasks`): include `autonomous` -- the skill reads `spec.md`; just name the
+     spec dir if helpful.
+   - Phase 4 (`ah-finalize-code`): include `autonomous` -- it runs the retrospective non-interactively
+     and forwards `autonomous` to `ah-create-pr`, so PR creation fails fast (rather than pausing) on a
+     broken build or missing input. The skill reads `spec.md`; name the spec dir if helpful.
 3. **Capture outputs** into the log with one call -- the artifact paths go in the last field, the
    attempt count in the `extra` field:
    `progress_log "${PROGRESS_FILE}" <k> <phase-name> <status> <attempts> "<artifact paths>"`
@@ -213,5 +227,18 @@ unfinished one. Completed phases (and their commits, done inside the phase skill
 ### Report
 
 When the pipeline finishes (or stops at an escalation), print a final summary: the status of each
-phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4. Echo `progress_render "${PROGRESS_FILE}"` one last time so the `/goal` evaluator can
+phase, paths to the PRD / ADR / spec dir, and the PR URL from phase 4.
+
+Because every phase ran autonomously (deciding without the user), surface the autonomous decisions
+for review. The spec dir is the phase-2 artifact captured in the progress log (or `specs/<branch>/`
+by convention). From the working repo where the pipeline ran, read and echo:
+
+- the `## Clarification Assumptions` section from `${SPEC_DIR}/spec.md` (written by `ah-create-tasks`),
+- the `Follow-up Actions` from `${SPEC_DIR}/retrospective.md` (written by `ah-finalize-code`'s
+  retrospective step).
+
+If a file or section is absent (nothing was assumed, or the repo has no retrospective extension),
+silently skip it -- never hard-error on a missing file.
+
+Then echo `progress_render "${PROGRESS_FILE}"` one last time so the `/goal` evaluator can
 confirm completion and clear the goal.

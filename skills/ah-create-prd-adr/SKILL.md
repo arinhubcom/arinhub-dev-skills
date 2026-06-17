@@ -19,13 +19,23 @@ is what `ah create tasks` consumes next.
 ## Input
 
 - **description** (required): The feature description, in any language. If the user did not
-  provide one, ask for it before doing anything else.
+  provide one, ask for it before doing anything else (or, when `autonomous`, fail fast with a
+  clear error).
 - **feature name** (optional): A short kebab-case slug for the filenames (e.g.
   `dark-mode-toggle`). If not provided, derive it from the description.
+- **autonomous** (optional): `autonomous` to run non-interactively. The discovery interview then
+  asks the user nothing -- answers are inferred from the description and repository and recorded as
+  a `## Discovery Assumptions` section in the PRD. Overwrites happen without confirmation. Any
+  missing required input (description) fails fast with a clear error instead of prompting. The
+  skill also suppresses its own Step 4 user report (returns only artifact paths + status). Default
+  off (interactive). Always set by ah-workflow.
 
 ## Procedure
 
 ### Step 0 - Initialize
+
+Determine **autonomy**: if the user passed `autonomous`, set `AUTONOMOUS=1`, else `AUTONOMOUS=0`.
+When `AUTONOMOUS=1`, never prompt the user anywhere in this skill.
 
 Resolve the repo name and output paths:
 
@@ -53,19 +63,23 @@ source "<skill_dir>/scripts/progress.sh"
   relative to this SKILL.md's directory), not an LLM-maintained markdown file.
 
 If a file already exists at either path, tell the user it will be overwritten and confirm
-before continuing.
+before continuing. When `AUTONOMOUS=1`, skip the confirmation and overwrite directly.
 
 ### Step 1 - Discovery interview
 
-A description alone usually leaves gaps that make a PRD vague. Before drafting, ask the user
-**2-3 focused questions** and wait for the answers. Good defaults:
+A description alone usually leaves gaps that make a PRD vague. The interview covers:
 
 - **The core problem**: Why build this now? What pain does it remove?
 - **Success metrics**: How will we know it worked? (so success criteria can be measurable)
 - **Constraints**: Tech stack, deadline, or dependencies to respect?
 
-Only ask what you genuinely cannot infer from the description and the repository. If the
-description is already rich and specific, ask fewer questions rather than padding.
+**Interactive mode (`AUTONOMOUS=0`)**: Before drafting, ask the user **2-3 focused questions** and
+wait for the answers. Only ask what you genuinely cannot infer from the description and the
+repository. If the description is already rich and specific, ask fewer questions rather than padding.
+
+**Autonomous mode (`AUTONOMOUS=1`)**: do NOT ask the user anything. Infer the answers from the
+description and the repository, and record them as a `## Discovery Assumptions` section in the PRD
+(each topic, the inferred answer, and a one-line rationale) so a human can later review/override.
 
 ### Step 2 - Generate the PRD
 
@@ -99,12 +113,15 @@ After writing it: `progress_log "${PROGRESS_FILE}" 2 adr done "" "${ADR_PATH}"`.
 
 ### Step 4 - Report
 
-Print a short summary:
+**Interactive mode (`AUTONOMOUS=0`)**: Print a short summary:
 
 - The PRD path and the ADR path.
 - A one-line description of the feature.
 - A note that the pair can now be fed into `ah create tasks` (which takes a PRD path, an ADR
   path, and an issue number).
+
+**Autonomous mode (`AUTONOMOUS=1`)**: skip the user-facing summary; return only the artifact paths
+(PRD + ADR) and a one-line status to the caller.
 
 Then mark the run complete: `progress_done "${PROGRESS_FILE}" completed`.
 
@@ -116,6 +133,8 @@ Then mark the run complete: `progress_done "${PROGRESS_FILE}" completed`.
   Only the `**Original prompt:**` line carries the (translated) original wording.
 - **No emojis** in any generated document.
 - **Overwrite safety**: if either target file already exists, confirm with the user before
-  replacing it -- these files may already be in use by `ah create tasks`.
+  replacing it -- these files may already be in use by `ah create tasks`. (When `AUTONOMOUS=1`,
+  overwrite without confirming.)
 - If the description is too thin to produce a meaningful PRD even after the interview, say so
-  and ask for more detail rather than inventing requirements or constraints.
+  and ask for more detail rather than inventing requirements or constraints. When `AUTONOMOUS=1`,
+  fail fast with a clear error instead of asking.

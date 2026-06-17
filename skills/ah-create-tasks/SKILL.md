@@ -20,6 +20,7 @@ Two modes:
 - **adr.md path** (required unless **feature name** given): path to ADR (Architectural Decision Records) describing architectural decisions, constraints, rationale. If neither this nor feature name given, ask before proceeding.
 - **issue number** (required): GitHub issue number for this feature (e.g., `42`). If not provided, ask before proceeding.
 - **mode** (optional): `update` to skip steps 1-4 and start from Clarify. Default create (full pipeline).
+- **autonomous** (optional): `autonomous` to run non-interactively. Steps 5 (clarify) and 11 (complexity check) then never wait for a human -- they decide from PRD/ADR/spec and record every choice as an ASSUMPTION. Any missing required input fails fast with a clear error instead of prompting. Default off (interactive). Always set by ah-workflow.
 - **spec number** (required in update mode, optional in create mode): spec number (e.g., `001`). In update mode it is used to construct the branch name. In create mode, when supplied, it pins the feature branch number (`jj/<spec>-<desc>`) via `/speckit.specify`'s `--number` flag instead of letting the script auto-detect it. Strictly non-interactive in create mode: only used if already supplied; never prompted for.
 
 ## Configuration
@@ -44,6 +45,8 @@ Determine **mode**:
 - If user said "update" and gave spec number, set `MODE=update`, store spec number as `SPEC_NUMBER`.
 - Otherwise set `MODE=create`. If the user also supplied a bare spec number (e.g., `007`), store it as `SPEC_NUMBER` (optional in create mode -- it pins the branch number in Step 1). If none was supplied, leave `SPEC_NUMBER` empty; do not prompt for it.
 
+Determine **autonomy**: if the user passed `autonomous`, set `AUTONOMOUS=1`, else `AUTONOMOUS=0`. When `AUTONOMOUS=1`, never prompt the user anywhere in this skill: any missing required input (prd/adr path, feature name, issue number, branch prefix) must fail fast with a clear error instead of asking.
+
 Resolve `PRD_PATH` and `ADR_PATH`:
 
 - If user gave **feature name** (not explicit paths), derive default paths via `ah-create-prd-adr` naming convention:
@@ -56,9 +59,9 @@ Resolve `PRD_PATH` and `ADR_PATH`:
 
 - If user gave explicit paths, use those (override feature-name default).
 
-If user gave neither explicit paths nor feature name, and no **issue number**, ask for all missing values now (before any other work). In update mode, also ask for **spec number** if not provided. In create mode, never ask for a spec number -- it is optional there and only used if already supplied. Store as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (update mode) `SPEC_NUMBER`.
+If user gave neither explicit paths nor feature name, and no **issue number**, ask for all missing values now (before any other work). In update mode, also ask for **spec number** if not provided. In create mode, never ask for a spec number -- it is optional there and only used if already supplied. Store as `PRD_PATH`, `ADR_PATH`, `ISSUE_NUMBER`, and (update mode) `SPEC_NUMBER`. When `AUTONOMOUS=1`, do not ask -- fail fast with a clear error naming the missing input.
 
-Verify `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either missing, ask user for correct path or feature name.
+Verify `prd.md` exists at `PRD_PATH` and `adr.md` exists at `ADR_PATH`. If either missing, ask user for correct path or feature name (or, when `AUTONOMOUS=1`, fail fast with a clear error).
 
 #### Update Mode Branch Setup
 
@@ -70,7 +73,7 @@ If `MODE=update`:
    GIT_BRANCH_PREFIX="${GIT_BRANCH_PREFIX:-}"
    ```
 
-   If `GIT_BRANCH_PREFIX` empty, ask user for branch prefix (e.g., `jj`).
+   If `GIT_BRANCH_PREFIX` empty, ask user for branch prefix (e.g., `jj`) -- or, when `AUTONOMOUS=1`, fail fast with a clear error instead of asking.
 
 2. Read `prd.md` at `${PRD_PATH}`. Derive short kebab-case branch description from title/main feature (e.g., `fix-submit-button`). Capture main feature or fix in 2-5 words.
 
@@ -158,7 +161,9 @@ Spawn **committer** subagent (Opus, low) to run `/commit`.
 
 Run `/speckit.clarify` yourself (not as subagent -- this command may require user interaction).
 
-If clarification asks questions needing user input, **wait for the user to respond** before proceeding. Do not skip or auto-answer clarification questions.
+**Interactive mode (`AUTONOMOUS=0`)**: If clarification asks questions needing user input, **wait for the user to respond** before proceeding. Do not skip or auto-answer clarification questions.
+
+**Autonomous mode (`AUTONOMOUS=1`)**: `/speckit.clarify` is inherently interactive and has no non-interactive flag, but it computes a "Recommended" option per question and permits proceeding when the user explicitly states they are skipping clarification. So prepend this directive to the prompt you pass it: "Run clarification non-interactively -- do NOT ask the user anything. For each question, select the Recommended option, or if none, the most reasonable answer derivable from PRD (`${PRD_PATH}`), ADR (`${ADR_PATH}`) and spec.md. The user is skipping interactive clarification. Apply the chosen answers to spec.md and append a `## Clarification Assumptions` section listing each question, the chosen answer, and a one-line rationale. Then continue without pausing." If the command still tries to pause, bypass it: read spec/PRD/ADR yourself, fill the gaps directly into spec.md, and write the same `## Clarification Assumptions` section.
 
 **Update mode only**: once `${SPEC_DIR}/spec.md` exists after clarify, prepend the same metadata block that create mode writes in Step 1 (it is otherwise never written in update mode, because Step 1 is skipped). Downstream phases (`ah-implement-tasks`, `ah-finalize-code`) read `Base Branch` and `Issue Number` from this block and will stop to ask the user if it is missing, so writing it here keeps an automated run from stalling. Prepend at the very top of `spec.md` (before existing content), using the values already in scope (`BASE_BRANCH` from Step 0, `ISSUE_NUMBER` from input):
 
@@ -209,9 +214,12 @@ Spawn subagent **complexity-checker** (Opus, low):
 
 - Prompt: `Cross-check the details to see if there are any over-engineered pieces in folder ${SPEC_DIR}. Return a numbered list of all issues found with severity and recommended fix for each.`
 
-After subagent returns, present findings to user yourself (not in subagent) and **ask which issues to fix**. Wait for user to respond before continuing.
+After subagent returns:
 
-Once user responds, spawn subagent **complexity-fixer** (Opus, low):
+- **Interactive mode (`AUTONOMOUS=0`)**: present findings to user yourself (not in subagent) and **ask which issues to fix**. Wait for user to respond before continuing.
+- **Autonomous mode (`AUTONOMOUS=1`)**: do not ask. Auto-select all issues with severity High/Critical to fix; record Medium/Low issues as a note in spec.md (or the spec dir) for later human review. Proceed with the auto-selected list.
+
+Once the fix list is determined, spawn subagent **complexity-fixer** (Opus, low):
 
 - Prompt: `Fix the following issues in ${SPEC_DIR}: <list of user-selected issues from complexity-checker findings>`
 - `progress_log "${PROGRESS_FILE}" 6 complexity-checker done`
@@ -335,7 +343,7 @@ Each arrow includes a `/commit` step (not shown for brevity).
 ## Important Notes
 
 - Every subagent runs on Opus with low effort mode.
-- Steps 5 (clarify) and 11 (complexity check) require user interaction -- workflow pauses and waits for user input before continuing.
+- Steps 5 (clarify) and 11 (complexity check) require user interaction **only when `AUTONOMOUS=0`** -- the workflow then pauses and waits for user input before continuing. With the `autonomous` flag they decide from PRD/ADR/spec context and record ASSUMPTIONs without pausing. Step 0 input gathering likewise only prompts when `AUTONOMOUS=0`; otherwise missing inputs fail fast.
 - `${PROGRESS_FILE}` is an append-only log written by `scripts/progress.sh`, not an LLM-maintained markdown file. Each step appends one `progress_log` line; timestamps come from `date` inside the helper. View it with `progress_render "${PROGRESS_FILE}"`.
 - All Spec Kit output files saved to `specs/<NEW_BRANCH_NAME>/`.
 - If any subagent fails, log it with `progress_log ... failed` and report to user before continuing. Do not silently skip steps.

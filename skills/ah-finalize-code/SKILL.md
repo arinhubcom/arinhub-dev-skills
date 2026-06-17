@@ -1,7 +1,7 @@
 ---
 name: ah-finalize-code
 description: Use this skill to finalize code changes before creating a PR when using the "ah" prefix. Use when asked to "ah finalize code", "ah finalize changes", or "ah finalize". Runs a multi-step workflow that simplifies code, creates a retrospective, adds tests, updates JSDoc references, updates documentation, optimizes and syncs specs, performs a code review, and creates a pull request -- committing after each step. Steps with no relevant changes are auto-skipped to save time. Supports resuming interrupted runs and skipping steps by name (e.g., "ah finalize code skip docs").
-argument-hint: "optional: 'skip docs', 'skip tests', 'skip specs' to skip specific steps"
+argument-hint: "optional: 'skip docs', 'skip tests', 'skip specs' to skip specific steps; 'autonomous' to run non-interactively"
 ---
 
 # Finalize Code
@@ -30,6 +30,8 @@ Steps 1-3, 5b, 6-8 always run. Users can also skip steps manually -- see step 0.
 
 ### 0. Initialize
 
+Determine **autonomy**: if the user passed `autonomous`, set `AUTONOMOUS=1`, else `AUTONOMOUS=0`. When `AUTONOMOUS=1`, never prompt the user anywhere in this skill -- take the deterministic defaults / fail-fast noted at each decision point, and run the retrospective non-interactively (see step 2).
+
 ```bash
 BRANCH_NAME=$(git branch --show-current)
 REPO_NAME=$(basename -s .git "$(git remote get-url origin)")
@@ -51,7 +53,7 @@ mkdir -p "${PROGRESS_DIR}"
 
 2. **Spec directory exists**: Verify `${SPEC_DIR}/spec.md` exists. If missing, stop: "No spec found at `${SPEC_DIR}/spec.md`. Run the task creation workflow first."
 
-3. **No uncommitted changes**: Run `git status --porcelain`. If there are uncommitted changes, ask the user whether to stash, commit first, or abort.
+3. **No uncommitted changes**: Run `git status --porcelain`. If there are uncommitted changes, ask the user whether to stash, commit first, or abort. When `AUTONOMOUS=1`, do not ask -- fail fast with a clear error listing the uncommitted paths.
 
 #### Extract metadata
 
@@ -60,7 +62,7 @@ Read `${SPEC_DIR}/spec.md` and extract:
 - `BASE_BRANCH` from the **Base Branch** metadata field
 - `ISSUE_NUMBER` from the **Issue Number** metadata field
 
-If either is missing, ask the user before proceeding.
+If either is missing, ask the user before proceeding (or, when `AUTONOMOUS=1`, fail fast with a clear error naming the missing field).
 
 #### Step selection
 
@@ -87,7 +89,7 @@ progress_init "${PROGRESS_FILE}" "${BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMB
 
 If `${PROGRESS_FILE}` already existed before this run:
 
-- **Resume**: Inspect completed steps with `grep '^step|' "${PROGRESS_FILE}"`. If some steps are logged `done`/`skipped(...)`, show them and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
+- **Resume**: Inspect completed steps with `grep '^step|' "${PROGRESS_FILE}"`. If some steps are logged `done`/`skipped(...)`, show them and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits. When `AUTONOMOUS=1`, do not ask -- default to resuming from the first incomplete step.
 - **Restart**: `rm "${PROGRESS_FILE}"` and call `progress_init` again for a fresh log.
 
 Record each step with `progress_log "${PROGRESS_FILE}" <n> <name> <status> [commit]` (status: `done`, `skipped(user)`, `skipped(none)`, `failed`). The helper stamps timestamps itself.
@@ -127,6 +129,7 @@ Spawn subagent **simplifier**:
 Spawn subagent **retrospective**:
 
 - Run `/speckit.retrospective.analyze`
+- When `AUTONOMOUS=1`, prepend this directive to the subagent's prompt: "Run `/speckit.retrospective.analyze` non-interactively. Do NOT ask the user anything. Respect the command's default-NO confirmation policy: do NOT modify `spec.md`, and do NOT stop on the <50%-completion gate -- instead record findings and follow-up actions in `retrospective.md` and continue." This avoids the command's interactive STOP/<50% and spec-change y/N gates, which would otherwise deadlock a subagent with no user channel.
 - After the skill finishes, fix any follow-up actions listed in the retrospective.md file and update the retrospective file accordingly
 - `progress_log "${PROGRESS_FILE}" 2 retrospective done <commit>`
 
@@ -184,17 +187,19 @@ Runs last (before PR creation) so it reviews everything -- code, docs, and spec 
 
 Spawn subagent **pr-creator**:
 
-- Run `/ah-create-pr` with prompt: `base branch: ${BASE_BRANCH}, issue number: ${ISSUE_NUMBER}`
+- Run `/ah-create-pr` with prompt: `base branch: ${BASE_BRANCH}, issue number: ${ISSUE_NUMBER}` (when `AUTONOMOUS=1`, append `, autonomous` so the PR step also runs non-interactively)
 - `progress_log "${PROGRESS_FILE}" 7 pr-creator done "" "<PR URL>"` then `progress_done "${PROGRESS_FILE}" completed`
 
 ### 8. Report to User
 
-Present a summary:
+**Interactive mode (`AUTONOMOUS=0`)**: Present a summary:
 
 - Path to `${PROGRESS_FILE}` plus a compact rendering via `progress_render "${PROGRESS_FILE}"`
 - PR URL
 - Steps completed, skipped (with reasons), and any failures
 - Unresolved findings from the code review
+
+**Autonomous mode (`AUTONOMOUS=1`)**: skip the user-facing summary; return only the PR URL, the progress file path, and a one-line status to the caller. The retrospective follow-ups live in `${SPEC_DIR}/retrospective.md` for the orchestrator to surface.
 
 ## Workflow Diagram
 
@@ -238,4 +243,4 @@ Present a summary:
 - All Spec Kit output files live in `specs/<branch-name>/`.
 - If any subagent fails, log it with `progress_log ... failed` and report to the user. Do not silently skip steps.
 - In a monorepo, identify the correct application from changed file paths and scope all commands to that application.
-- Base branch and issue number come from `spec.md` metadata -- if missing, ask the user.
+- Base branch and issue number come from `spec.md` metadata -- if missing, ask the user (or, when `AUTONOMOUS=1`, fail fast with a clear error). All user-interaction points (uncommitted-changes, resume, retrospective gates) only apply when `AUTONOMOUS=0`; with the `autonomous` flag they take deterministic defaults / fail fast, as noted at each step.

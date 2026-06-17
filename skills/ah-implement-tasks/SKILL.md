@@ -31,6 +31,7 @@ Tools below available to orchestrator and implementer subagents. Use when situat
 - **feature directory** (optional): Path to feature's spec directory containing tasks.md. If omitted, auto-detected via prerequisites script.
 - **additional instructions** (optional): Extra guidance forwarded to `/speckit.implement` (e.g., specific task IDs, phases to focus on).
 - **skip directives** (optional): `skip context` skips best-practice and documentation loading, `skip checklists` skips checklist verification.
+- **autonomous** (optional): `autonomous` to run non-interactively. The skill then never prompts the user: it picks deterministic defaults (resume an existing run, proceed past incomplete checklists with a recorded note), fails fast on missing required inputs/metadata, and on persistent failure reports remaining tasks instead of asking how to proceed. It also suppresses its own Step 5 user report (returns only artifact paths + status). Default off (interactive). Always set by ah-workflow.
 
 ## Procedure
 
@@ -47,13 +48,15 @@ PROGRESS_FILE="${PROGRESS_DIR}/progress-implement-${REPO_NAME}-${SAFE_BRANCH_NAM
 mkdir -p "${PROGRESS_DIR}"
 ```
 
+Determine **autonomy**: if the user passed `autonomous`, set `AUTONOMOUS=1`, else `AUTONOMOUS=0`. When `AUTONOMOUS=1`, never prompt the user anywhere in this skill -- use the deterministic defaults noted at each decision point, and fail fast on any missing required value.
+
 #### Pre-validation
 
 1. **Tasks exist**: Verify `${SPEC_DIR}/tasks.md` exists. If missing, stop: "No tasks.md found at `${SPEC_DIR}/tasks.md`. Run `/ah-create-tasks` first."
 
 2. **Spec exists**: Verify `${SPEC_DIR}/spec.md` exists. If missing, stop: "No spec.md found. The spec directory may be incomplete."
 
-3. **No uncommitted changes**: Run `git status --porcelain`. If uncommitted changes exist, ask user: stash, commit first, or abort.
+3. **No uncommitted changes**: Run `git status --porcelain`. If uncommitted changes exist, ask user: stash, commit first, or abort. When `AUTONOMOUS=1`, do not ask -- fail fast with a clear error listing the uncommitted paths (the caller must hand over a clean tree).
 
 #### Extract metadata
 
@@ -62,7 +65,7 @@ Read `${SPEC_DIR}/spec.md`, extract:
 - `BASE_BRANCH` from **Base Branch** metadata field
 - `ISSUE_NUMBER` from **Issue Number** metadata field
 
-If either missing, ask the user before proceeding.
+If either missing, ask the user before proceeding (or, when `AUTONOMOUS=1`, fail fast with a clear error naming the missing field).
 
 #### Detect tech stack
 
@@ -97,7 +100,7 @@ progress_init "${PROGRESS_FILE}" "${BRANCH_NAME}" "${BASE_BRANCH}" "${ISSUE_NUMB
 
 If `${PROGRESS_FILE}` already existed before this run:
 
-- **Resume**: Inspect completed steps with `grep '^step|' "${PROGRESS_FILE}"`. If some steps are logged `done`/`skipped(...)`, show them and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits.
+- **Resume**: Inspect completed steps with `grep '^step|' "${PROGRESS_FILE}"`. If some steps are logged `done`/`skipped(...)`, show them and ask: "Resume from step N, or restart?" If resuming, skip completed steps and their commits. When `AUTONOMOUS=1`, do not ask -- default to resuming from the first incomplete step.
 - **Restart**: `rm "${PROGRESS_FILE}"` and call `progress_init` again for a fresh log.
 
 Record each step with `progress_log "${PROGRESS_FILE}" <n> <name> <status> [commit]` (status: `done`, `skipped(user)`, `skipped(none)`, `failed`). The helper stamps timestamps itself.
@@ -125,7 +128,7 @@ If `${SPEC_DIR}/checklists/` exists, scan all checklist files:
   | test.md     | 8     | 5    | 3         | FAIL   |
   ```
 
-- **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If user declines, halt execution.
+- **If any incomplete**: Ask "Some checklists are incomplete. Proceed anyway?" Wait for user response. If user declines, halt execution. When `AUTONOMOUS=1`, do not ask -- proceed anyway and record a one-line note listing which checklists were incomplete.
 - **If all complete or no checklists directory**: Proceed automatically.
 
 `progress_log "${PROGRESS_FILE}" 1 checklists done` (or `skipped(user)` if skipped).
@@ -168,7 +171,7 @@ Skip if scope is narrow -- implementer can read files directly.
 
 #### 2e. Confirm and record
 
-Briefly confirm to user which contexts will load (one line per category):
+Briefly confirm to user which contexts will load (one line per category). This is informational only -- do not pause for a response; when `AUTONOMOUS=1`, emit it only to the log, not to the user:
 
 ```text
 Skills: /vercel-composition-patterns, /vercel-react-best-practices, /building-components
@@ -224,9 +227,11 @@ Read `${SPEC_DIR}/tasks.md`, check whether all tasks marked `[X]`.
 - Skip remaining tasks and continue to report
 - Investigate specific failures
 
+When `AUTONOMOUS=1`, do not ask -- skip remaining tasks and continue to the report, listing the remaining task IDs/descriptions so the caller can surface them.
+
 ### 5. Report
 
-Present summary:
+**Interactive mode (`AUTONOMOUS=0`)**: Present summary:
 
 - Path to `${PROGRESS_FILE}` plus a compact rendering via `progress_render "${PROGRESS_FILE}"`
 - Completed tasks by phase (Setup, Tests, Core, Integration, Polish)
@@ -235,6 +240,8 @@ Present summary:
 - External tools used and what they contributed
 - Test results and coverage status
 - Next steps: run `/ah-finalize-code` to prepare for PR
+
+**Autonomous mode (`AUTONOMOUS=1`)**: skip the user-facing summary; return only the artifact paths (progress file, tasks.md completion) plus a one-line status (and any remaining task IDs) to the caller.
 
 ## Workflow Diagram
 
@@ -281,4 +288,4 @@ Present summary:
 - All Spec Kit output files live in `specs/<branch-name>/`.
 - If any subagent fails, note failure in `${PROGRESS_FILE}` and report to user. Do not silently skip steps.
 - After implementation complete, natural next step is `/ah-finalize-code` -- handles simplification, testing, docs, code review, PR creation.
-- Base branch and issue number come from `spec.md` metadata -- if missing, ask the user.
+- Base branch and issue number come from `spec.md` metadata -- if missing, ask the user (or, when `AUTONOMOUS=1`, fail fast with a clear error). Steps that interact with the user (uncommitted-changes, resume, checklist gate, after-3-passes) only do so when `AUTONOMOUS=0`; with the `autonomous` flag they take deterministic defaults or fail fast, as noted at each step.

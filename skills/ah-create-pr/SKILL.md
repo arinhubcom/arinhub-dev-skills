@@ -10,15 +10,18 @@ Analyze current branch and create or update a well-structured GitHub Pull Reques
 
 ## Input
 
-- **Base branch** (REQUIRED): target branch this PR merges into (e.g., `main`, `develop`). If the user did not provide it, STOP and ask before proceeding. Never assume or default to any branch.
+- **Base branch** (REQUIRED): target branch this PR merges into (e.g., `main`, `develop`). If the user did not provide it, STOP and ask before proceeding (or, when `autonomous`, fail fast with a clear error). Never assume or default to any branch.
 - **Issue number** (optional): GitHub issue number this PR addresses (e.g., `42`, `#42`). If not provided by the user, do not infer it from the branch name -- omit issue references from the PR.
 - **Labels** (optional): comma-separated labels to apply (e.g., `bug,urgent`, `feature,frontend`). If not provided by the user, auto-detect labels in step 2.
+- **autonomous** (optional): `autonomous` to run non-interactively. Every point that would otherwise STOP and ask the user (missing base branch, `gh auth` failure, uncommitted changes, failed quality checks, base-branch mismatch on an existing PR) instead **fails fast with a clear error** -- the PR is not created and the caller (e.g. ah-workflow) escalates. The skill also suppresses its own Step 5 user report (returns only the PR URL + status). Default off (interactive). Set by ah-workflow / ah-finalize-code.
 - Current Git branch with unmerged commits
 - Git diff against the base branch
 
 ## Procedure
 
 ### 0. Preparation
+
+Determine **autonomy**: if the user passed `autonomous`, set `AUTONOMOUS=1`, else `AUTONOMOUS=0`. When `AUTONOMOUS=1`, never prompt the user -- every STOP/ask below becomes a fail-fast error.
 
 Verify GitHub CLI authentication and check for uncommitted changes before proceeding.
 
@@ -29,9 +32,9 @@ gh auth status
 git status --porcelain
 ```
 
-If `gh auth status` fails, stop and ask the user to authenticate with `gh auth login`. If there are uncommitted changes (staged or unstaged), warn the user that these changes will not be included in the PR and ask whether to continue or wait.
+If `gh auth status` fails, stop and ask the user to authenticate with `gh auth login`. If there are uncommitted changes (staged or unstaged), warn the user that these changes will not be included in the PR and ask whether to continue or wait. When `AUTONOMOUS=1`, do not ask: fail fast on `gh auth` failure, and fail fast if there are uncommitted changes (the caller must hand over a clean, committed tree).
 
-Run quality checks to catch issues before creating the PR. If any check fails, report the failure and ask the user how to proceed.
+Run quality checks to catch issues before creating the PR. If any check fails, report the failure and ask the user how to proceed. When `AUTONOMOUS=1`, do not ask -- fail fast with the failing check output so the workflow escalates instead of creating a PR on a broken build.
 
 ```bash
 pnpm preflight
@@ -72,7 +75,7 @@ EXISTING_PR_URL=$(echo "${EXISTING_PR}" | jq -r '.url // empty')
 EXISTING_PR_BASE=$(echo "${EXISTING_PR}" | jq -r '.baseRefName // empty')
 ```
 
-If an open PR already exists for the current branch, the skill updates it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing.
+If an open PR already exists for the current branch, the skill updates it in Step 4 instead of creating a new one. If the existing PR targets a different base branch than the one the user provided, warn the user and ask how to proceed before continuing. When `AUTONOMOUS=1`, do not ask -- fail fast with a clear error describing the base-branch mismatch.
 
 If the user provided an issue number, use it for the PR references. Do not infer issue numbers from the branch name or commit messages.
 
@@ -157,7 +160,9 @@ Omit `--label` flags entirely if no labels were determined.
 
 ### 5. Report to User
 
-After creating or updating the PR, provide:
+When `AUTONOMOUS=1`, skip this user-facing report; return only the PR URL and a one-line status (created/updated) to the caller.
+
+**Interactive mode (`AUTONOMOUS=0`)** -- after creating or updating the PR, provide:
 
 1. **PR URL** -- direct link to the created or updated pull request
 2. **Status** -- whether the PR was **created** or **updated** (existing PR detected)
@@ -177,6 +182,8 @@ Before submitting the PR, verify:
 - Test coverage is addressed (present or explicitly noted as TODO)
 
 ## Error Handling
+
+When `AUTONOMOUS=1`, every "STOP and ask" / "prompt the user" below becomes a fail-fast error (clear message, no PR created) so the caller can escalate.
 
 - If no base branch was provided, STOP and ask the user for it
 - If no commits exist ahead of the base branch, abort and inform the user
