@@ -44,9 +44,8 @@ completion goal without spinning forever on a phase that can't progress.
 
 **Phase 3.5 (verify) is optional** -- it runs only when the prompt carries an ad-hoc browser/QA
 verification instruction (`VERIFY_TASK`, see step 0). When absent, the pipeline is the unchanged
-four-phase sequence. It is placed **before** finalize so the PR already contains any fixes, and it
-deliberately does **not** run `/simplify` or `pnpm preflight` -- `ah-finalize-code` runs both in its
-first step immediately after.
+four-phase sequence. It is placed **before** finalize, and it deliberately does **not** run the
+simplify or preflight checks -- `ah-finalize-code` runs both in its first step immediately after.
 
 Key input propagation: phases 1 and 2 are where data flows between skills. Phase 1 produces the
 PRD and ADR paths; you pass them into phase 2. **Important about the base branch:** `ah-create-tasks`
