@@ -1,6 +1,6 @@
 ---
 name: ah-audit-plan
-description: Audit any implementation plan for missed touch-points, wrong assumptions, and downstream consequences before finalizing it, with the "ah" prefix. Use for "ah audit plan", or before committing to a plan for a removal/rename/refactor, a new feature, a config/infra/tooling change, or a migration. Verifies the plan's factual premises against the actual repo, sweeps the whole codebase (incl. sibling apps, docs, tests, fixtures, CI) for everything the change touches, and surfaces risks the plan under-addresses.
+description: Audit implementation plan for missed touch-points, false premises, downstream blockers before finalizing, with the "ah" prefix. Use for "ah audit plan"; applies to removal/rename/refactor, new feature, config/infra/tooling change, migration. Verify premises vs repo; sweep whole codebase (incl. sibling apps, docs, tests, fixtures, CI); surface under-addressed risks.
 ---
 
 # ah-audit-plan
