@@ -7,9 +7,7 @@ description: Audit implementation plan for missed touch-points, false premises, 
 
 Purpose: before finalizing plan, falsify it vs repo. Catch wrong premises, missed touch-points (docs/tests/fixtures/sibling apps), and downstream blockers before work starts.
 
-The **spirit**: don't just re-read the plan — try to *falsify* it. Verify each factual claim
-against the current repo, hunt for everything the change ripples into, and name the risks the
-plan glosses over. Report as a delta on the plan, then update the plan file.
+Spirit: falsify plan, not re-read. Verify each premise vs repo; sweep all touch-points; name glossed-over risks. Report delta, then update plan file.
 
 ## When to use
 
