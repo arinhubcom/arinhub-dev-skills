@@ -5,11 +5,7 @@ description: Audit implementation plan for missed touch-points, false premises, 
 
 # ah-audit-plan
 
-Purpose: before finalizing ANY plan, pressure-test it against reality. A plan written from
-memory or a single-file view almost always (a) rests on an unverified assumption, (b) misses
-touch-points in docs / tests / fixtures / sibling apps, or (c) under-addresses a downstream
-consequence that turns into red CI or a blocked workflow later. This skill catches those
-before the work starts.
+Purpose: before finalizing plan, falsify it vs repo. Catch wrong premises, missed touch-points (docs/tests/fixtures/sibling apps), and downstream blockers before work starts.
 
 The **spirit**: don't just re-read the plan — try to *falsify* it. Verify each factual claim
 against the current repo, hunt for everything the change ripples into, and name the risks the
