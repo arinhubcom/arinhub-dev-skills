@@ -64,7 +64,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.      | `"ah resolve pr review"`                                                                                                                                                            |
 | [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools CLI -- finds timing races between framework DOM cleanup and React re-renders.           | `"ah fix dom flash"`                                                                                                                                                                |
 | [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.              | `"ah fix ui bug"`                                                                                                                                                                   |
-| [`ah-audit-plan`](skills/ah-audit-plan/SKILL.md)                                     | Audit a removal/rename/refactor plan for missed touch-points before finalizing -- sweeps source, types/schema, stories, tests, snapshots, screenshots, docs, and fixtures across the whole repo (incl. sibling apps) and flags positional-renumber traps. | `"ah audit plan"`                                                                                                                                                                   |
+| [`ah-audit-plan`](skills/ah-audit-plan/SKILL.md)                                     | Audit any implementation plan before finalizing -- verifies the plan's factual premises against the actual repo, sweeps the whole codebase (incl. sibling apps, docs, tests, fixtures, CI) for everything the change touches, and surfaces risks and environment blockers the plan under-addresses. Includes a checklist mode for identifier removals/renames. | `"ah audit plan"`                                                                                                                                                                   |
 
 ### How to Use `ah-workflow`
 
@@ -319,9 +319,9 @@ Requires `chrome-devtools-cli` skill (see [Prerequisites](#prerequisites)). The 
 
 ### How to Use `ah-audit-plan`
 
-Run before finalizing a plan to remove, rename, or refactor a cross-cutting thing (a widget
-variant, a prop, a schema/enum field, a config option, an API surface). Pass the plan or the
-identifier being changed:
+Run before finalizing ANY non-trivial plan — a removal/rename/refactor, a new feature, a
+config/tooling/infra/CI change, a dependency bump, or a migration. Pass the plan (or the thing
+being changed):
 
 ```sh
 /ah-audit-plan
@@ -329,12 +329,15 @@ identifier being changed:
 ah audit plan
 ```
 
-It launches an `Explore` subagent that greps every identifier across the whole repo (not just one
-app) and reports each touch-point (`path:line`) against a stack-agnostic checklist: schema/validation,
-type definitions, consumer logic, stories/examples, unit tests, snapshots, screenshot baselines,
-docs/test-catalogs, data fixtures, sibling/legacy apps, and repo instructions. It highlights
-positional-renumbering traps (deleting a middle case shifts every later snapshot/baseline/doc row)
-and any shared-schema field other consumers still read, then updates the plan file accordingly.
+The spirit is to *falsify* the plan, not just re-read it: it verifies each factual premise
+against the current repo (behavior, "only consumer", "CI already covers it", tool/flag
+existence), launches an `Explore` subagent to sweep the whole repo (not just one app) for every
+touch-point the change ripples into, and stresses downstream consequences and environments the
+plan ignored (CI vs local, headless, background/sub-agent, fresh clone, other worktrees). It
+reports a delta on the plan (`path:line` evidence), leading with any falsified premise or
+environment blocker, and updates the plan file. For identifier removals/renames it also runs a
+concrete checklist-mode sweep (schema, types, consumers, stories, tests, snapshots, screenshot
+baselines, docs, fixtures, sibling apps, specs) and flags positional-renumbering traps.
 
 ## How to create your own Agent Skill
 
