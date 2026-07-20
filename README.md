@@ -40,7 +40,7 @@ auto-detects whether it is a new feature or an update). Or run each step individ
 ## Installation
 
 ```sh
-npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-workflow -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr
+npx skills add arinhubcom/arinhub-dev-skills -y -g -s ah-workflow -s ah-review-code -s ah-submit-code-review -s ah-verify-requirements-coverage -s ah-create-tasks -s ah-implement-tasks -s ah-check-qa -s ah-create-pr -s ah-finalize-code -s ah-resolve-pr-review -s ah-fix-dom-flash -s ah-fix-ui-bug -s ah-create-prd-adr -s ah-audit-plan
 ```
 
 ## Agent Skills
@@ -64,6 +64,7 @@ All skills have a unique namespace prefix (`ah-`) to avoid naming conflicts and 
 | [`ah-resolve-pr-review`](skills/ah-resolve-pr-review/SKILL.md)                       | Resolve unresolved PR review conversations by reading each comment, understanding the reviewer's intent, and implementing fixes in the codebase.      | `"ah resolve pr review"`                                                                                                                                                            |
 | [`ah-fix-dom-flash`](skills/ah-fix-dom-flash/SKILL.md)                               | Detect and debug DOM flash/flicker bugs using Chrome DevTools CLI -- finds timing races between framework DOM cleanup and React re-renders.           | `"ah fix dom flash"`                                                                                                                                                                |
 | [`ah-fix-ui-bug`](skills/ah-fix-ui-bug/SKILL.md)                                     | Debug and fix UI bugs using Chrome DevTools CLI -- inspects elements, injects diagnostics, tracks positions, and analyzes DOM mutations.              | `"ah fix ui bug"`                                                                                                                                                                   |
+| [`ah-audit-plan`](skills/ah-audit-plan/SKILL.md)                                     | Audit a removal/rename/refactor plan for missed touch-points before finalizing -- sweeps source, types/schema, stories, tests, snapshots, screenshots, docs, and fixtures across the whole repo (incl. sibling apps) and flags positional-renumber traps. | `"ah audit plan"`                                                                                                                                                                   |
 
 ### How to Use `ah-workflow`
 
@@ -315,6 +316,25 @@ ah fix ui bug http://localhost:6006/iframe.html?id=my-story, the chip lands at w
 ```
 
 Requires `chrome-devtools-cli` skill (see [Prerequisites](#prerequisites)). The skill navigates to the page, takes an a11y snapshot, injects diagnostic scripts (layout shift detection, position tracking, mutation observers), reproduces the interaction, and analyzes collected data to identify the root cause. For single-frame flash/flicker timing races, use `ah-fix-dom-flash` instead.
+
+### How to Use `ah-audit-plan`
+
+Run before finalizing a plan to remove, rename, or refactor a cross-cutting thing (a widget
+variant, a prop, a schema/enum field, a config option, an API surface). Pass the plan or the
+identifier being changed:
+
+```sh
+/ah-audit-plan
+# or
+ah audit plan
+```
+
+It launches an `Explore` subagent that greps every identifier across the whole repo (not just one
+app) and reports each touch-point (`path:line`) against a stack-agnostic checklist: schema/validation,
+type definitions, consumer logic, stories/examples, unit tests, snapshots, screenshot baselines,
+docs/test-catalogs, data fixtures, sibling/legacy apps, and repo instructions. It highlights
+positional-renumbering traps (deleting a middle case shifts every later snapshot/baseline/doc row)
+and any shared-schema field other consumers still read, then updates the plan file accordingly.
 
 ## How to create your own Agent Skill
 
