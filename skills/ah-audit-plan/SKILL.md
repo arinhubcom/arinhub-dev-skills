@@ -87,6 +87,8 @@ quoted) or "no change needed" with the reason. Lead with any **falsified premise
 **environment blocker** — those change the plan most. Then update the plan file: fix wrong
 assumptions, add missed touch-points, and add the verification steps below.
 
+**Mark plan audited.** After updating plan file, add subtitle under plan top-level title: `_Audited by ah-audit-plan_` (italic). If subtitle already exists from prior run, update in place (no dup). Makes audit visible at glance.
+
 ## Verification the plan should include
 
 - Verify every premise the plan depends on is still true (re-grep / re-read).
