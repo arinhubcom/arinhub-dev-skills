@@ -45,6 +45,10 @@ exact `path:line` + quoted evidence.
   change needed" with the reason.
 - **Docs & manifests** — READMEs, AGENTS.md/CLAUDE.md, test-catalogs, generated API docs, and
   ID-numbered tables/lists that must stay in sync.
+- **Specs folder** — if `specs/<branch>/` exists (Spec Kit output: spec, plan, research,
+  data-model, contracts, tasks.md), check whether the plan drifts from it: premises the spec
+  states, tasks the plan adds/drops/reorders, requirements it changes. Name each spec file the
+  plan must update, or "no change needed" with the reason. Skip if no `specs/` folder.
 - **Environment & lifecycle** — will the change behave differently across CI vs local,
   headless vs interactive, background/sub-agent vs foreground, fresh clone vs installed,
   each git worktree? Heavy steps that can't run everywhere are a classic blocker.
@@ -92,6 +96,8 @@ assumptions, add missed touch-points, and add the verification steps below.
 ## Verification the plan should include
 
 - Verify every premise the plan depends on is still true (re-grep / re-read).
+- If `specs/<branch>/` exists, re-sync the affected spec files (spec / plan / tasks.md) so they
+  match the audited plan.
 - Project typecheck / compile (the variant that also checks tests, if one exists).
 - Whole-repo grep of every touched identifier/path → no unintended leftover hits.
 - Regenerate any snapshots/baselines via project commands; run the affected suites green.
