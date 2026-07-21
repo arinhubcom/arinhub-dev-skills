@@ -1,5 +1,10 @@
 # Agents
 
+## Creating & modifying skills
+
+Whenever you create a new skill, or modify or improve an existing one, always
+use the `skill-creator` skill.
+
 ## Formatting
 
 File formatting is handled by Prettier on save. Do not manually fix formatting issues — they will be resolved automatically when the file is saved.
